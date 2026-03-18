@@ -249,6 +249,53 @@ func TestSetLastSeen(t *testing.T) {
 	}
 }
 
+// TestTransition_UnknownPlayer verifies Transition returns an error for a
+// non-existent player ID (exercises the GetPlayer error path in Transition).
+func TestTransition_UnknownPlayer(t *testing.T) {
+	svc, cleanup := newTestService(t)
+	defer cleanup()
+
+	err := svc.Transition("does-not-exist", player.StatusRunning)
+	if err == nil {
+		t.Fatal("expected error for unknown player ID, got nil")
+	}
+}
+
+// TestGet_UnknownPlayer verifies Get returns an error for a non-existent ID.
+func TestGet_UnknownPlayer(t *testing.T) {
+	svc, cleanup := newTestService(t)
+	defer cleanup()
+
+	_, err := svc.Get("does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for unknown player ID, got nil")
+	}
+}
+
+// TestSetLastSeen_UnknownPlayer verifies SetLastSeen returns an error for a
+// non-existent player ID.
+func TestSetLastSeen_UnknownPlayer(t *testing.T) {
+	svc, cleanup := newTestService(t)
+	defer cleanup()
+
+	err := svc.SetLastSeen("does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for unknown player ID, got nil")
+	}
+}
+
+// TestMarkDead_UnknownPlayer verifies MarkDead returns an error for a
+// non-existent player ID (exercises the GetPlayer error path in MarkDead).
+func TestMarkDead_UnknownPlayer(t *testing.T) {
+	svc, cleanup := newTestService(t)
+	defer cleanup()
+
+	err := svc.MarkDead("does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for unknown player ID, got nil")
+	}
+}
+
 // TestList verifies List returns all registered players.
 func TestList(t *testing.T) {
 	svc, cleanup := newTestService(t)

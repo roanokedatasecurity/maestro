@@ -501,6 +501,540 @@ func TestCronJobCRUD(t *testing.T) {
 	}
 }
 
+// TestJobs_SetScratchpad verifies SetJobScratchpad updates the path.
+func TestJobs_SetScratchpad(t *testing.T) {
+	s := openTestStore(t)
+
+	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
+	player, _ := s.CreatePlayer("coder", false)
+	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "")
+
+	newPath := "/home/user/.maestro/scratch/" + job.ID + ".md"
+	if err := s.SetJobScratchpad(job.ID, newPath); err != nil {
+		t.Fatalf("SetJobScratchpad: %v", err)
+	}
+
+	got, err := s.GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if got.ScratchpadPath != newPath {
+		t.Errorf("ScratchpadPath = %q, want %q", got.ScratchpadPath, newPath)
+	}
+}
+
+// TestJobs_SetJobDeadLetter verifies SetJobDeadLetter transitions status and stamps completed_at.
+func TestJobs_SetJobDeadLetter(t *testing.T) {
+	s := openTestStore(t)
+
+	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
+	player, _ := s.CreatePlayer("coder", false)
+	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "/tmp/scratch/test.md")
+
+	if err := s.SetJobDeadLetter(job.ID); err != nil {
+		t.Fatalf("SetJobDeadLetter: %v", err)
+	}
+
+	got, err := s.GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if got.Status != JobStatusDeadLetter {
+		t.Errorf("Status = %q, want DeadLetter", got.Status)
+	}
+	if got.CompletedAt == nil {
+		t.Error("CompletedAt should be set after SetJobDeadLetter")
+	}
+}
+
+// TestJobs_SetJobPayload verifies SetJobPayload overwrites the payload field.
+func TestJobs_SetJobPayload(t *testing.T) {
+	s := openTestStore(t)
+
+	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "original", false)
+	player, _ := s.CreatePlayer("coder", false)
+	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "original", "")
+
+	injected := "original\n\n$MAESTRO_JOB_ID=" + job.ID + "\n$MAESTRO_SCRATCHPAD=/tmp/test.md"
+	if err := s.SetJobPayload(job.ID, injected); err != nil {
+		t.Fatalf("SetJobPayload: %v", err)
+	}
+
+	got, err := s.GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if got.Payload != injected {
+		t.Errorf("Payload = %q, want %q", got.Payload, injected)
+	}
+}
+
+// TestJobs_ListJobs verifies ListJobs returns all jobs ordered by creation time.
+func TestJobs_ListJobs(t *testing.T) {
+	s := openTestStore(t)
+
+	p, _ := s.CreatePlayer("coder", false)
+	m1, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w1", false)
+	m2, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w2", false)
+	j1, _ := s.CreateJob(m1.ID, p.ID, "coder", "w1", "")
+	j2, _ := s.CreateJob(m2.ID, p.ID, "coder", "w2", "")
+
+	jobs, err := s.ListJobs()
+	if err != nil {
+		t.Fatalf("ListJobs: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("ListJobs len = %d, want 2", len(jobs))
+	}
+	ids := map[string]bool{jobs[0].ID: true, jobs[1].ID: true}
+	if !ids[j1.ID] || !ids[j2.ID] {
+		t.Errorf("ListJobs returned unexpected IDs: %v %v", jobs[0].ID, jobs[1].ID)
+	}
+}
+
+// TestJobs_ListJobsByPlayer verifies ListJobsByPlayer filters by player_id.
+func TestJobs_ListJobsByPlayer(t *testing.T) {
+	s := openTestStore(t)
+
+	pA, _ := s.CreatePlayer("coder-A", false)
+	pB, _ := s.CreatePlayer("coder-B", false)
+	mA1, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA1", false)
+	mA2, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA2", false)
+	mB1, _ := s.CreateMessage("conductor", pB.ID, MessageTypeAssignment, PriorityNormal, "wB1", false)
+
+	jA1, _ := s.CreateJob(mA1.ID, pA.ID, "coder-A", "wA1", "")
+	jA2, _ := s.CreateJob(mA2.ID, pA.ID, "coder-A", "wA2", "")
+	_, _ = s.CreateJob(mB1.ID, pB.ID, "coder-B", "wB1", "")
+
+	jobs, err := s.ListJobsByPlayer(pA.ID)
+	if err != nil {
+		t.Fatalf("ListJobsByPlayer: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("ListJobsByPlayer len = %d, want 2", len(jobs))
+	}
+	ids := map[string]bool{jobs[0].ID: true, jobs[1].ID: true}
+	if !ids[jA1.ID] || !ids[jA2.ID] {
+		t.Errorf("ListJobsByPlayer returned wrong jobs")
+	}
+	for _, j := range jobs {
+		if j.PlayerID != pA.ID {
+			t.Errorf("expected player %q, got %q", pA.ID, j.PlayerID)
+		}
+	}
+}
+
+// TestJobs_ListJobsByStatus verifies ListJobsByStatus filters by status.
+func TestJobs_ListJobsByStatus(t *testing.T) {
+	s := openTestStore(t)
+
+	p, _ := s.CreatePlayer("coder", false)
+	m1, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w1", false)
+	m2, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w2", false)
+	m3, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w3", false)
+	j1, _ := s.CreateJob(m1.ID, p.ID, "coder", "w1", "")
+	_, _ = s.CreateJob(m2.ID, p.ID, "coder", "w2", "")
+	j3, _ := s.CreateJob(m3.ID, p.ID, "coder", "w3", "")
+
+	_ = s.UpdateJobStatus(j3.ID, JobStatusBackgrounded)
+
+	inProgress, err := s.ListJobsByStatus(JobStatusInProgress)
+	if err != nil {
+		t.Fatalf("ListJobsByStatus InProgress: %v", err)
+	}
+	if len(inProgress) != 2 {
+		t.Errorf("ListJobsByStatus InProgress len = %d, want 2", len(inProgress))
+	}
+
+	backgrounded, err := s.ListJobsByStatus(JobStatusBackgrounded)
+	if err != nil {
+		t.Fatalf("ListJobsByStatus Backgrounded: %v", err)
+	}
+	if len(backgrounded) != 1 || backgrounded[0].ID != j3.ID {
+		t.Errorf("ListJobsByStatus Backgrounded: expected j3, got %+v", backgrounded)
+	}
+
+	complete, err := s.ListJobsByStatus(JobStatusComplete)
+	if err != nil {
+		t.Fatalf("ListJobsByStatus Complete: %v", err)
+	}
+	if len(complete) != 0 {
+		t.Errorf("ListJobsByStatus Complete len = %d, want 0", len(complete))
+	}
+	_ = j1 // suppress unused warning
+}
+
+// TestJobs_ListJobsByPlayerAndStatus verifies combined player+status filtering.
+func TestJobs_ListJobsByPlayerAndStatus(t *testing.T) {
+	s := openTestStore(t)
+
+	pA, _ := s.CreatePlayer("coder-A", false)
+	pB, _ := s.CreatePlayer("coder-B", false)
+	mA1, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA1", false)
+	mA2, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA2", false)
+	mB1, _ := s.CreateMessage("conductor", pB.ID, MessageTypeAssignment, PriorityNormal, "wB1", false)
+
+	jA1, _ := s.CreateJob(mA1.ID, pA.ID, "coder-A", "wA1", "")
+	jA2, _ := s.CreateJob(mA2.ID, pA.ID, "coder-A", "wA2", "")
+	_, _ = s.CreateJob(mB1.ID, pB.ID, "coder-B", "wB1", "")
+
+	// Background jA2 for pA.
+	_ = s.UpdateJobStatus(jA2.ID, JobStatusBackgrounded)
+
+	// pA InProgress → should be only jA1.
+	inProgress, err := s.ListJobsByPlayerAndStatus(pA.ID, JobStatusInProgress)
+	if err != nil {
+		t.Fatalf("ListJobsByPlayerAndStatus InProgress: %v", err)
+	}
+	if len(inProgress) != 1 || inProgress[0].ID != jA1.ID {
+		t.Errorf("expected only jA1 InProgress, got %+v", inProgress)
+	}
+
+	// pA Backgrounded → should be only jA2.
+	backgrounded, err := s.ListJobsByPlayerAndStatus(pA.ID, JobStatusBackgrounded)
+	if err != nil {
+		t.Fatalf("ListJobsByPlayerAndStatus Backgrounded: %v", err)
+	}
+	if len(backgrounded) != 1 || backgrounded[0].ID != jA2.ID {
+		t.Errorf("expected only jA2 Backgrounded, got %+v", backgrounded)
+	}
+
+	// pB InProgress → none (pB job not Backgrounded, but confirm it's isolated to pB).
+	pBJobs, err := s.ListJobsByPlayerAndStatus(pB.ID, JobStatusInProgress)
+	if err != nil {
+		t.Fatalf("ListJobsByPlayerAndStatus pB InProgress: %v", err)
+	}
+	if len(pBJobs) != 1 {
+		t.Errorf("expected 1 InProgress job for pB, got %d", len(pBJobs))
+	}
+}
+
+// TestNotifications_Paginated verifies ListUnreadNotificationsPaginated with limit and offset.
+func TestNotifications_Paginated(t *testing.T) {
+	s := openTestStore(t)
+
+	// Create 5 notifications.
+	for i := 0; i < 5; i++ {
+		if _, err := s.CreateNotification(nil, nil, "test", "summary"); err != nil {
+			t.Fatalf("CreateNotification %d: %v", i, err)
+		}
+	}
+
+	// limit=0 → all 5.
+	all, err := s.ListUnreadNotificationsPaginated(0, 0)
+	if err != nil {
+		t.Fatalf("ListUnreadNotificationsPaginated(0,0): %v", err)
+	}
+	if len(all) != 5 {
+		t.Fatalf("limit=0 expected 5, got %d", len(all))
+	}
+
+	// limit=3, offset=0 → first 3.
+	page1, err := s.ListUnreadNotificationsPaginated(3, 0)
+	if err != nil {
+		t.Fatalf("ListUnreadNotificationsPaginated(3,0): %v", err)
+	}
+	if len(page1) != 3 {
+		t.Fatalf("page1 expected 3, got %d", len(page1))
+	}
+
+	// limit=3, offset=3 → last 2.
+	page2, err := s.ListUnreadNotificationsPaginated(3, 3)
+	if err != nil {
+		t.Fatalf("ListUnreadNotificationsPaginated(3,3): %v", err)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("page2 expected 2, got %d", len(page2))
+	}
+
+	// Pages should not share IDs.
+	p1IDs := map[string]bool{}
+	for _, n := range page1 {
+		p1IDs[n.ID] = true
+	}
+	for _, n := range page2 {
+		if p1IDs[n.ID] {
+			t.Errorf("notification %q appears in both pages", n.ID)
+		}
+	}
+}
+
+// TestNotifications_Count verifies CountUnreadNotifications before and after reads.
+func TestNotifications_Count(t *testing.T) {
+	s := openTestStore(t)
+
+	count, err := s.CountUnreadNotifications()
+	if err != nil {
+		t.Fatalf("CountUnreadNotifications (empty): %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0, got %d", count)
+	}
+
+	n1, _ := s.CreateNotification(nil, nil, "test", "first")
+	_, _ = s.CreateNotification(nil, nil, "test", "second")
+
+	count, err = s.CountUnreadNotifications()
+	if err != nil {
+		t.Fatalf("CountUnreadNotifications: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2, got %d", count)
+	}
+
+	_ = s.MarkNotificationRead(n1.ID)
+
+	count, err = s.CountUnreadNotifications()
+	if err != nil {
+		t.Fatalf("CountUnreadNotifications after read: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 after reading one, got %d", count)
+	}
+}
+
+// TestPlayers_GetByName verifies GetPlayerByName returns the correct player.
+func TestPlayers_GetByName(t *testing.T) {
+	s := openTestStore(t)
+
+	p, err := s.CreatePlayer("named-player", false)
+	if err != nil {
+		t.Fatalf("CreatePlayer: %v", err)
+	}
+
+	got, err := s.GetPlayerByName("named-player")
+	if err != nil {
+		t.Fatalf("GetPlayerByName: %v", err)
+	}
+	if got.ID != p.ID {
+		t.Errorf("ID = %q, want %q", got.ID, p.ID)
+	}
+	if got.Name != "named-player" {
+		t.Errorf("Name = %q, want named-player", got.Name)
+	}
+
+	// Unknown name should return an error.
+	if _, err := s.GetPlayerByName("does-not-exist"); err == nil {
+		t.Error("expected error for unknown name, got nil")
+	}
+}
+
+// TestJobs_NotFound verifies that update/set operations return "not found" errors
+// for non-existent job IDs, exercising the RowsAffected == 0 branches.
+func TestJobs_NotFound(t *testing.T) {
+	s := openTestStore(t)
+
+	t.Run("UpdateJobStatus", func(t *testing.T) {
+		if err := s.UpdateJobStatus("no-such-job", JobStatusComplete); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("SetJobCompleted", func(t *testing.T) {
+		if err := s.SetJobCompleted("no-such-job"); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("SetJobScratchpad", func(t *testing.T) {
+		if err := s.SetJobScratchpad("no-such-job", "/tmp/x.md"); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("SetJobDeadLetter", func(t *testing.T) {
+		if err := s.SetJobDeadLetter("no-such-job"); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("SetJobPayload", func(t *testing.T) {
+		if err := s.SetJobPayload("no-such-job", "payload"); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+}
+
+// TestPlayers_NotFound verifies that update operations return "not found" errors
+// for non-existent player IDs.
+func TestPlayers_NotFound(t *testing.T) {
+	s := openTestStore(t)
+
+	t.Run("UpdatePlayerStatus", func(t *testing.T) {
+		if err := s.UpdatePlayerStatus("no-such-player", PlayerStatusRunning); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("UpdateLastSeen", func(t *testing.T) {
+		if err := s.UpdateLastSeen("no-such-player"); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+}
+
+// TestMessages_NotFound verifies MarkDelivered returns "not found" for unknown ID.
+func TestMessages_NotFound(t *testing.T) {
+	s := openTestStore(t)
+	if err := s.MarkDelivered("no-such-message"); err == nil {
+		t.Error("expected error, got nil")
+	}
+}
+
+// TestNotifications_NotFound verifies MarkNotificationRead returns "not found" for unknown ID.
+func TestNotifications_NotFound(t *testing.T) {
+	s := openTestStore(t)
+	if err := s.MarkNotificationRead("no-such-notification"); err == nil {
+		t.Error("expected error, got nil")
+	}
+}
+
+// TestCronJobs_NotFound verifies DeleteCronJob and UpdateCronJobFired return
+// "not found" for non-existent IDs.
+func TestCronJobs_NotFound(t *testing.T) {
+	s := openTestStore(t)
+
+	t.Run("DeleteCronJob", func(t *testing.T) {
+		if err := s.DeleteCronJob("no-such-cron"); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+
+	t.Run("UpdateCronJobFired", func(t *testing.T) {
+		if err := s.UpdateCronJobFired("no-such-cron", time.Now(), time.Now().Add(time.Hour)); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+}
+
+// TestApprovals_RecordDecision_NotFound verifies RecordDecision returns "not found".
+func TestApprovals_RecordDecision_NotFound(t *testing.T) {
+	s := openTestStore(t)
+	if err := s.RecordDecision("no-such-approval", ApprovalDecisionHuman); err == nil {
+		t.Error("expected error for non-existent approval, got nil")
+	}
+}
+
+// TestJobs_ClosedStore verifies that List functions return errors when the DB is closed.
+// These tests cover the Query error branches that cannot be triggered with a healthy DB.
+func TestJobs_ClosedStore(t *testing.T) {
+	cases := []struct {
+		name string
+		fn   func(s *Store) error
+	}{
+		{"ListJobs", func(s *Store) error {
+			_, err := s.ListJobs()
+			return err
+		}},
+		{"ListJobsByPlayer", func(s *Store) error {
+			_, err := s.ListJobsByPlayer("p1")
+			return err
+		}},
+		{"ListJobsByStatus", func(s *Store) error {
+			_, err := s.ListJobsByStatus(JobStatusInProgress)
+			return err
+		}},
+		{"ListJobsByPlayerAndStatus", func(s *Store) error {
+			_, err := s.ListJobsByPlayerAndStatus("p1", JobStatusInProgress)
+			return err
+		}},
+		{"ListDeadLetterJobs", func(s *Store) error {
+			_, err := s.ListDeadLetterJobs()
+			return err
+		}},
+		{"ListActiveJobs", func(s *Store) error {
+			_, err := s.ListActiveJobs("p1")
+			return err
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "test.db")
+			s, err := Open(path)
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			s.Close()
+			if err := tc.fn(s); err == nil {
+				t.Errorf("%s: expected error from closed DB, got nil", tc.name)
+			}
+		})
+	}
+}
+
+// TestPlayers_ClosedStore verifies ListPlayers returns an error when the DB is closed.
+func TestPlayers_ClosedStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s.Close()
+	if _, err := s.ListPlayers(); err == nil {
+		t.Error("expected error from closed DB, got nil")
+	}
+}
+
+// TestMessages_ClosedStore verifies ListUndelivered returns an error when the DB is closed.
+func TestMessages_ClosedStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s.Close()
+	if _, err := s.ListUndelivered("coder"); err == nil {
+		t.Error("expected error from closed DB, got nil")
+	}
+}
+
+// TestNotifications_ClosedStore verifies List and Count operations return errors on closed DB.
+func TestNotifications_ClosedStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s.Close()
+
+	if _, err := s.ListUnreadNotifications(); err == nil {
+		t.Error("ListUnreadNotifications: expected error from closed DB, got nil")
+	}
+	if _, err := s.ListUnreadNotificationsPaginated(0, 0); err == nil {
+		t.Error("ListUnreadNotificationsPaginated: expected error from closed DB, got nil")
+	}
+	if _, err := s.CountUnreadNotifications(); err == nil {
+		t.Error("CountUnreadNotifications: expected error from closed DB, got nil")
+	}
+}
+
+// TestApprovals_ClosedStore verifies ListPendingApprovals returns an error on closed DB.
+func TestApprovals_ClosedStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s.Close()
+	if _, err := s.ListPendingApprovals(); err == nil {
+		t.Error("expected error from closed DB, got nil")
+	}
+}
+
+// TestCronJobs_ClosedStore verifies ListCronJobs returns an error on closed DB.
+func TestCronJobs_ClosedStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	s.Close()
+	if _, err := s.ListCronJobs(); err == nil {
+		t.Error("expected error from closed DB, got nil")
+	}
+}
+
 // TestApprovals_CRUD covers create, record decision, and list pending.
 func TestApprovals_CRUD(t *testing.T) {
 	s := openTestStore(t)
