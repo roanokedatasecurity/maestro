@@ -182,6 +182,22 @@ func (s *Store) ListJobsByStatus(status JobStatus) ([]*Job, error) {
 	return scanJobs(rows)
 }
 
+// ListJobsByPlayerAndStatus returns all jobs for a player with the given status,
+// ordered oldest first.
+func (s *Store) ListJobsByPlayerAndStatus(playerID string, status JobStatus) ([]*Job, error) {
+	rows, err := s.db.Query(`
+		SELECT id, message_id, player_id, player_name, payload, scratchpad_path,
+		       status, approval_metadata, created_at, completed_at
+		FROM jobs WHERE player_id = ? AND status = ? ORDER BY created_at ASC`,
+		playerID, string(status),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs by player and status: %w", err)
+	}
+	defer rows.Close()
+	return scanJobs(rows)
+}
+
 // ListDeadLetterJobs returns all DeadLetter jobs, ordered oldest first.
 func (s *Store) ListDeadLetterJobs() ([]*Job, error) {
 	rows, err := s.db.Query(`

@@ -76,6 +76,53 @@ func (s *Store) ListUnreadNotifications() ([]*Notification, error) {
 	return notifs, rows.Err()
 }
 
+// ListUnreadNotificationsPaginated returns unread notifications oldest-first,
+// with SQL-level LIMIT and OFFSET. limit=0 returns all unread rows.
+func (s *Store) ListUnreadNotificationsPaginated(limit, offset int) ([]*Notification, error) {
+	var rows *sql.Rows
+	var err error
+	if limit > 0 {
+		rows, err = s.db.Query(`
+			SELECT id, message_id, job_id, type, summary, read_at, created_at
+			FROM notifications WHERE read_at IS NULL
+			ORDER BY created_at ASC LIMIT ? OFFSET ?`,
+			limit, offset,
+		)
+	} else {
+		rows, err = s.db.Query(`
+			SELECT id, message_id, job_id, type, summary, read_at, created_at
+			FROM notifications WHERE read_at IS NULL ORDER BY created_at ASC`,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list unread notifications paginated: %w", err)
+	}
+	defer rows.Close()
+
+	var notifs []*Notification
+	for rows.Next() {
+		n, err := scanNotificationRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		notifs = append(notifs, n)
+	}
+	return notifs, rows.Err()
+}
+
+// CountUnreadNotifications returns the number of unread notifications.
+// Used by the Conductor tab badge — avoids fetching full rows just for a count.
+func (s *Store) CountUnreadNotifications() (int, error) {
+	var count int
+	err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM notifications WHERE read_at IS NULL",
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count unread notifications: %w", err)
+	}
+	return count, nil
+}
+
 func scanNotification(row *sql.Row) (*Notification, error) {
 	var n Notification
 	var messageID, jobID sql.NullString

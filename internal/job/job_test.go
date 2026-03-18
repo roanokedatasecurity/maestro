@@ -38,14 +38,19 @@ func TestCreateJob(t *testing.T) {
 	if j.ScratchpadPath == "" {
 		t.Fatal("expected scratchpad path to be set")
 	}
-	expected := filepath.Join("/tmp/maestro-scratch", j.ID+".md")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	dir := filepath.Join(home, ".maestro", "scratch")
+	expected := filepath.Join(dir, j.ID+".md")
 	if j.ScratchpadPath != expected {
 		t.Errorf("scratchpad path = %q, want %q", j.ScratchpadPath, expected)
 	}
 
 	// Directory must exist.
-	if _, err := os.Stat("/tmp/maestro-scratch"); os.IsNotExist(err) {
-		t.Error("expected /tmp/maestro-scratch to exist after Create")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		t.Errorf("expected scratchpad dir %q to exist after Create", dir)
 	}
 
 	// Status must be InProgress.

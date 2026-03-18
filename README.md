@@ -6,7 +6,7 @@
 
 Most AI collaboration is one-on-one: you and your AI in a single session, working through problems sequentially. Maestro changes the unit of collaboration.
 
-The AI running as **Conductor** can assemble an ensemble — Coders, Researchers, Monitors, PR Managers — arrange them into a split-pane workspace, assign work via a durable message bus, and drive the entire operational session end-to-end. You set direction. The AI builds and runs the machine that executes it.
+The AI running as **Conductor** can assemble an ensemble — Coders, Researchers, Monitors, PR Managers — arrange them into a tabbed workspace, assign work via a durable message bus, and drive the entire operational session end-to-end. You set direction. The AI builds and runs the machine that executes it.
 
 You stay in control at the decisions that matter: meaningful approvals based on risk and policy you define, reviewing work at natural checkpoints, confirming direction. Everything between those checkpoints — the spawning, the coordination, the monitoring, the routing, the cleanup — the Conductor handles. The session doesn't wait for you to set it up. It's already running when you arrive.
 
@@ -20,9 +20,9 @@ You open a session. The Conductor wakes up, reads its role profile from memory, 
 
 You say: *"Let's implement the new API endpoint."*
 
-The Conductor reads the task, confirms design decisions are locked, and issues an Assignment to a Coder player via the message bus. The Assignment creates a Job record — scratchpad path assigned, tracked in durable storage. The Conductor adds a pane for the coder and tells you the topology is set. While the coder works, the Conductor keeps going — answering questions, reading signals from the Monitor, handling other tasks.
+The Conductor reads the task, confirms design decisions are locked, and issues an Assignment to a Coder player via the message bus. The Assignment creates a Job record — scratchpad path assigned, tracked in durable storage. The Conductor adds a tab for the coder and tells you the topology is set. While the coder works, the Conductor keeps going — answering questions, reading signals from the Monitor, handling other tasks.
 
-When the coder finishes, it signals Done. The signal routes to the Conductor's notification queue — not injected into the Conductor's PTY, surfaced as a structured notification the Conductor reads at its own pace. The Conductor reviews the scratchpad, raises a PR, and surfaces a merge confirmation to you. You approve. The PR merges, the job is marked complete, and the Conductor creates a verification ticket.
+When the coder finishes, it signals Done. The signal routes to the Conductor's notification queue — not injected into the Conductor's terminal, surfaced as a structured notification the Conductor reads at its own pace. The Conductor reviews the scratchpad, raises a PR, and surfaces a merge confirmation to you. You approve. The PR merges, the job is marked complete, and the Conductor creates a verification ticket.
 
 You were involved at three points: setting direction, approving the merge, and confirming verification. The AI ran the rest.
 
@@ -36,9 +36,9 @@ If `$MAESTRO_SOCKET` is set in your environment, you are running inside Maestro.
 
 **Your job as Conductor** is decomposition and synthesis. You break work into roles, issue Assignments via the message bus, read Job scratchpads, and synthesize results. You do not do the implementation or investigation yourself — you delegate and stay focused on coordination.
 
-**The data plane is Jobs and scratchpads.** Every Assignment creates a Job with a conn-managed scratchpad path injected as `$MAESTRO_SCRATCHPAD`. Players write there. You read Jobs via the API — no file naming agreements needed.
+**The data plane is Jobs and scratchpads.** Every Assignment creates a Job with a Maestro-managed scratchpad path injected as `$MAESTRO_SCRATCHPAD`. Players write there. You read Jobs via the API — no file naming agreements needed.
 
-**The control plane is the message bus.** Issue Assignments, receive Done/Blocked/Background signals, inspect queues and jobs — all via the Unix socket API. Signals route to your notification queue, not your PTY.
+**The control plane is the message bus.** Issue Assignments, receive Done/Blocked/Background signals, inspect queues and jobs — all via the Unix socket API. Signals route to your notification queue, not your terminal.
 
 **Routing is enforced by the infrastructure:**
 - You (Conductor) → Players: Assignments
@@ -105,7 +105,7 @@ Maestro persists queue and job state to SQLite. If you restart, Maestro recovers
 
 ## What's novel
 
-**Durable AI orchestration.** Queue and job state persists across restarts. The session is recoverable, not ephemeral — dead-letter jobs, in-progress work, and pending assignments survive conn exit. Foundation for true detach/reattach.
+**Durable AI orchestration.** Queue and job state persists across restarts. The session is recoverable, not ephemeral — dead-letter jobs, in-progress work, and pending assignments survive Maestro exit. Foundation for true detach/reattach.
 
 **The Conductor is the parent agent, not first-among-equals.** Maestro enforces this at the infrastructure level: routing rules are structural, not convention. Players cannot message each other or self-authorize work. The Conductor has full visibility; players see only their own queue and jobs.
 

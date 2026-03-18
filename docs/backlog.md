@@ -77,6 +77,7 @@ Maestro's design inherently solves. No backlog item required.
 |----|-------|-------------|--------|----------|
 | MAESTRO-B-17 | Warn on unmerged commits before branch switch | Conductor-level guard: before any player is assigned a branch switch task, check `git log origin/main..HEAD` and surface unresolved commits as a blocking notification. | CONN-32 | M |
 | MAESTRO-B-18 | Buffer read API | `GET /players/:id/buffer` — read a player's recent output programmatically. Used by Tester player, CRM Enricher, and cross-player search. | CONN-16, CONN-47 | M |
+| MAESTRO-B-19 | `store.GetConductor()` — dedicated Conductor lookup | `HandleBlocked` (and any future path that needs the Conductor) currently scans all players via `ListPlayers()` and filters by `IsConductor`. Replace with a dedicated `GetConductor()` store method (`SELECT ... WHERE is_conductor = 1 LIMIT 1`). Cheap SQL; eliminates the scan pattern before it proliferates. | — | L |
 
 ---
 

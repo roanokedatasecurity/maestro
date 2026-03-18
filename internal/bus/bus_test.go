@@ -342,7 +342,7 @@ func TestHandleDone(t *testing.T) {
 	}
 
 	// Conductor should have a Done notification.
-	notifs, err := e.svc.GetNotifications(0)
+	notifs, err := e.svc.GetNotifications(0, 0)
 	if err != nil {
 		t.Fatalf("GetNotifications: %v", err)
 	}
@@ -478,7 +478,7 @@ func TestHandlePlayerDead(t *testing.T) {
 	}
 
 	// Two Lifecycle notifications should be enqueued (one per dead-letter job).
-	notifs, err := e.svc.GetNotifications(0)
+	notifs, err := e.svc.GetNotifications(0, 0)
 	if err != nil {
 		t.Fatalf("GetNotifications: %v", err)
 	}
@@ -503,7 +503,7 @@ func TestMarkNotificationRead(t *testing.T) {
 		t.Fatalf("HandleDone: %v", err)
 	}
 
-	notifs, err := e.svc.GetNotifications(0)
+	notifs, err := e.svc.GetNotifications(0, 0)
 	if err != nil {
 		t.Fatalf("GetNotifications: %v", err)
 	}
@@ -517,7 +517,7 @@ func TestMarkNotificationRead(t *testing.T) {
 	}
 
 	// Should no longer appear in unread list.
-	after, err := e.svc.GetNotifications(0)
+	after, err := e.svc.GetNotifications(0, 0)
 	if err != nil {
 		t.Fatalf("GetNotifications after mark: %v", err)
 	}
@@ -543,7 +543,7 @@ func TestGetNotificationsLimit(t *testing.T) {
 		}
 	}
 
-	all, err := e.svc.GetNotifications(0)
+	all, err := e.svc.GetNotifications(0, 0)
 	if err != nil {
 		t.Fatalf("GetNotifications(0): %v", err)
 	}
@@ -551,7 +551,7 @@ func TestGetNotificationsLimit(t *testing.T) {
 		t.Fatalf("expected 3 notifications, got %d", len(all))
 	}
 
-	limited, err := e.svc.GetNotifications(2)
+	limited, err := e.svc.GetNotifications(2, 0)
 	if err != nil {
 		t.Fatalf("GetNotifications(2): %v", err)
 	}

@@ -1,4 +1,4 @@
-# conn IPC Design — Inter-Player Message Bus
+# Maestro IPC Design — Inter-Player Message Bus
 
 **Status:** Draft — under review
 **Authors:** Kirt Debique, Damon
@@ -32,16 +32,16 @@ Everything built on top of the current IPC inherits these failure modes.
 
 Four concepts that must not be conflated:
 
-**Message** — an entry in conn's queue. Has a type, a producer, a target consumer,
+**Message** — an entry in Maestro's queue. Has a type, a producer, a target consumer,
 a priority, and a payload. Persistent until delivered. The queue owns durability.
 
 **Assignment** — the Message type that carries work ("do this"). Delivery of an
 Assignment to a player creates a Job. Distinct from signal types (Done, Blocked,
 Lifecycle) which transition Job state rather than create it.
 
-**Job** — conn's record of in-progress work. Born when an Assignment is delivered
+**Job** — Maestro's record of in-progress work. Born when an Assignment is delivered
 to a player. Owns the associated scratchpad path. Lifecycle: in-progress →
-complete | dead-letter. Lives in conn infrastructure, not in file conventions.
+complete | dead-letter. Lives in Maestro infrastructure, not in file conventions.
 
 **Task** — a human-AI collaboration work item (CONN-71, OKD-38, etc.). Tracked in
 task files or external systems. Entirely outside the IPC layer. A Task may result
@@ -61,31 +61,31 @@ it — the infrastructure owns delivery. This changes the producer model entirel
 - The Conductor never needs to know whether a target player is idle before sending.
 
 **Persistence scope:** Durable, on-disk, from day one. Queue and Job records survive
-conn process exit. Individual player PTY processes are ephemeral — they die when
-conn exits — but the work state they represent does not. This is the foundation of
-detach/reattach: conn can exit and relaunch, reading persistent state from disk to
-reconstitute exactly where things were.
+Maestro process exit. Individual player terminal processes are ephemeral — they die
+when Maestro exits — but the work state they represent does not. This is the
+foundation of detach/reattach: Maestro can exit and relaunch, reading persistent
+state from disk to reconstitute exactly where things were.
 
 **Storage:** SQLite, embedded. No external dependencies, no daemon. The `/queue` and
 `/jobs` inspection endpoints are SQL queries. Schema is defined up front; nothing
 built on the IPC layer will need to be retrofitted for durability.
 
-**Recovery on relaunch:** Players that were running at exit are dead (PTYs gone).
-Their Jobs transition to `DeadLetter` on next launch. Queued messages for dead
-players remain queued — the Conductor sees a recovery brief at boot: dead-letter
-Jobs, pending Assignments, scratchpads intact. The Conductor decides what to
-re-queue and which players to respawn.
+**Recovery on relaunch:** Players that were running at exit are dead (terminal
+processes gone). Their Jobs transition to `DeadLetter` on next launch. Queued
+messages for dead players remain queued — the Conductor sees a recovery brief at
+boot: dead-letter Jobs, pending Assignments, scratchpads intact. The Conductor
+decides what to re-queue and which players to respawn.
 
-**Detach/reattach (phase 2):** conn exits cleanly; relaunch resumes from durable
+**Detach/reattach (phase 2):** Maestro exits cleanly; relaunch resumes from durable
 state. No daemon required — durable storage provides the continuity, not a live
 process. Gets the majority of detach value with a single binary and no background
 process supervision.
 
-**Backend service + remote multi-session (phase 3):** conn splits into a persistent
-backend service and a thin TUI client connected over an authenticated channel. The
-right architecture for teams, remote access, and shared sessions — but a separate
-product moment. Phase 1 and 2 do not preclude it; the durable schema designed now
-will carry forward.
+**Backend service + remote multi-session (phase 3):** Maestro splits into a
+persistent backend service and a thin native client connected over an authenticated
+channel. The right architecture for teams, remote access, and shared sessions — but
+a separate product moment. Phase 1 and 2 do not preclude it; the durable schema
+designed now will carry forward.
 
 ---
 
@@ -99,7 +99,7 @@ type Priority string // High | Normal
 
 type Message struct {
     ID         string    // unique identifier
-    From       string    // player ID of producer, or "conn" for system messages
+    From       string    // player ID of producer, or "maestro" for system messages
     To         string    // player ID of target consumer
     Type       MsgType
     Priority   Priority
@@ -116,7 +116,7 @@ type Message struct {
 | `Assignment` | Conductor → player | Job (on delivery) | Work for the target player to perform |
 | `Done` | Player → Conductor | — | Player finished its current Job |
 | `Blocked` | Player → Conductor | — | Player needs a decision before proceeding |
-| `Lifecycle` | conn → Conductor | — | System event: player spawned, died, compacting |
+| `Lifecycle` | maestro → Conductor | — | System event: player spawned, died, compacting |
 
 ### Priority
 
@@ -133,19 +133,19 @@ completes its current Job before the next message is delivered.
 
 ## Per-Player Consume Queue
 
-Each player has a priority queue of inbound Messages. conn is the broker — it
+Each player has a priority queue of inbound Messages. Maestro is the broker — it
 enqueues, routes, and delivers.
 
 **Delivery rule:** A Message is delivered to a player only when the player is in
-`StatusIdle`. On transition to `StatusIdle`, conn drains the queue: delivers the
+`StatusIdle`. On transition to `StatusIdle`, Maestro drains the queue: delivers the
 highest-priority pending Message, which transitions the player to `StatusRunning`.
 
-**Assignment delivery** creates a Job record in conn before the Assignment text is
-typed into the player's PTY. The Job is born in-progress at that moment.
+**Assignment delivery** creates a Job record in Maestro before the Assignment text is
+injected into the player's terminal. The Job is born in-progress at that moment.
 
-**For the Conductor:** The Conductor's queue is never delivered via `Type()`. It is
-surfaced as a structured notification list in the conn UI. The Conductor reads and
-acts on notifications at its own pace — nothing is injected into the PTY.
+**For the Conductor:** The Conductor's queue is never injected into its terminal. It
+is surfaced as a structured notification list in the Maestro UI. The Conductor reads
+and acts on notifications at its own pace.
 
 ---
 
@@ -175,14 +175,14 @@ type Job struct {
     PlayerID    string    // the player currently executing it
     PlayerName  string    // snapshot of player name at delivery time
     Payload     string    // the assignment text
-    Scratchpad  string    // path: conn-managed, assigned at Job creation
+    Scratchpad  string    // path: Maestro-managed, assigned at Job creation
     Status      JobStatus
     CreatedAt   time.Time
     CompletedAt time.Time // zero if not complete
 }
 ```
 
-**Scratchpad ownership:** conn assigns a scratchpad path to each Job at creation.
+**Scratchpad ownership:** Maestro assigns a scratchpad path to each Job at creation.
 The path is included in the Assignment payload so the player knows where to write.
 This replaces the current ad-hoc file naming convention. The player writes to its
 assigned scratchpad; the Conductor reads Job records to find scratchpad paths — no
@@ -192,12 +192,12 @@ naming agreements needed between Conductor and players.
 
 ## Conductor Notification Surface
 
-The Conductor is a consumer with a UI-rendered queue rather than a PTY-delivered
-one. conn maintains a structured notification list for the Conductor. When a new
-message arrives, conn fires a BubbleTea event to trigger a UI update.
+The Conductor is a consumer with a UI-rendered queue rather than a terminal-injected
+one. Maestro maintains a structured notification list for the Conductor. When a new
+message arrives, Maestro fires a UI event to trigger an update.
 
 **Notification UI** (design TBD — see Open Questions):
-- Notification badge on Conductor pane border showing unread count
+- Notification badge on Conductor tab showing unread count
 - `ctrl+n` opens notification list panel
 - Notifications persist until dismissed by Kirt
 - High-priority / `WaitForAck` Blocked messages surface as the existing approval
@@ -207,7 +207,7 @@ message arrives, conn fires a BubbleTea event to trigger a UI update.
 
 ## Dead-Letter Handling
 
-When a player dies (`StatusDead`) while executing a Job, conn transitions the Job
+When a player dies (`StatusDead`) while executing a Job, Maestro transitions the Job
 to `DeadLetter` and enqueues a High-priority `Lifecycle` Message to the Conductor's
 notification queue. The notification includes:
 
@@ -215,7 +215,7 @@ notification queue. The notification includes:
 - The scratchpad path (may contain partial work)
 - Suggested action: re-queue Assignment to a new player, or discard
 
-The Conductor decides. conn does not auto-reassign.
+The Conductor decides. Maestro does not auto-reassign.
 
 ---
 
@@ -271,7 +271,7 @@ new terminology.
 ### 2. The Conductor is the parent agent — routing structurally enforced
 
 The Conductor is not first-among-equals. It is THE agent — the root of the
-authorization hierarchy. conn is opinionated about this. No Conductor, no session.
+authorization hierarchy. Maestro is opinionated about this. No Conductor, no session.
 
 **Routing rules, enforced at the bus level:**
 
@@ -279,12 +279,12 @@ authorization hierarchy. conn is opinionated about this. No Conductor, no sessio
 |---|---|---|---|
 | Conductor | Any player | Assignment | ✅ |
 | Player | Conductor | Done, Blocked | ✅ |
-| conn | Conductor | Lifecycle | ✅ |
+| maestro | Conductor | Lifecycle | ✅ |
 | Player | Any player | Any | ❌ rejected |
 | Player | Conductor | Assignment | ❌ players don't authorize work |
 
 **Cascading implications:**
-- **Boot:** conn always starts with a Conductor. A session without one is invalid.
+- **Boot:** Maestro always starts with a Conductor. A session without one is invalid.
   All players are children of the Conductor.
 - **Authorization:** Jobs exist because the Conductor authorized them. A Job without
   a Conductor-originated Assignment cannot exist.
@@ -300,8 +300,8 @@ one active Conductor, the session is invalid without one, and the Conductor has
 structural privileges (routing authority, full Job/queue visibility, dead-letter
 recovery). These are enforced by Maestro infrastructure.
 
-Maestro is **not** opinionated about where the Conductor pane lives in the layout,
-which Players are spawned at boot, or what the split ratios are. Those are agentic
+Maestro is **not** opinionated about where the Conductor tab lives in the layout,
+which Players are spawned at boot, or what the arrangement is. Those are agentic
 profile decisions — declared by the Conductor at session start via `PUT /layout`
 and the spawn API. A different Conductor persona could choose an entirely different
 workspace arrangement. Maestro renders whatever the Conductor declares.
@@ -320,10 +320,10 @@ detach/reattach (phase 2) and backend service (phase 3) without retrofitting.
 ## Open Questions
 
 2. **Queue depth / backpressure.** If a player's queue grows unboundedly (perpetually
-   busy, Assignments accumulating), should conn surface a warning to the Conductor?
+   busy, Assignments accumulating), should Maestro surface a warning to the Conductor?
    Is there a max queue depth after which new Assignments are rejected?
 
-3. **Delivery acknowledgment.** Once an Assignment is delivered to a player's PTY,
+3. **Delivery acknowledgment.** Once an Assignment is delivered to a player's terminal,
    is the Job considered in-progress? Or is there an explicit ack before marking
    in-progress? (Player could crash immediately after delivery before writing
    anything. With durable storage, delivery is on record regardless.)
@@ -371,7 +371,7 @@ The ctrl+y fallback remains valid as a simplified first implementation.
 
 **Long-poll HTTP mechanic survives** — `wait=true` still holds the player's HTTP
 request open until a decision is reached (autonomous or human). The approval prompt
-routes through the Conductor notification surface, not the Conductor PTY.
+routes through the Conductor notification surface, not the Conductor's terminal.
 
 ### 5. Conductor notification UI: durable queue, badge + ctrl+n panel
 
@@ -381,14 +381,14 @@ richness of what flows through it: dead-letter recovery briefs, approval scoreca
 done signals, lifecycle events.
 
 **Locked:**
-- Durable notification queue in SQLite — notifications survive conn restart
-- Unread count badge on Conductor pane border
+- Durable notification queue in SQLite — notifications survive Maestro restart
+- Unread count badge on Conductor tab
 - `ctrl+n` opens a structured notification panel: one entry per notification,
   showing type, player name, age, and one-line summary; expandable to full
   scorecard / Job context inline
 - Notifications persist until explicitly dismissed by Kirt
 - `wait=true` Blocked surfaces as approval overlay (existing mechanic, new routing)
-- **Never PTY injection under any circumstances**
+- **Never terminal injection under any circumstances**
 
 **Visual design** (colors, layout, typography) deferred to OKD-38 status/color
 review — the same color language defined for player status badges applies here.
@@ -396,7 +396,7 @@ review — the same color language defined for player status badges applies here
 ### 6. Players may have multiple active Jobs — Job ID mandatory in all signals
 
 A player is not constrained to a single active Job. A player may background a
-current Job (signal `Background` to conn) and receive a new Assignment while the
+current Job (signal `Background` to Maestro) and receive a new Assignment while the
 backgrounded Job remains in-progress. Capable AI players can productively parallelize
 rather than sitting idle on external dependencies. The Conductor retains full
 visibility via durable Job records regardless of how many Jobs a player has active.
@@ -409,16 +409,26 @@ InProgress → Backgrounded → InProgress  (resumed)
 ```
 
 **Delivery triggers on `StatusIdle` OR `Background` signal** — a player signaling
-Background is declaring capacity for another Assignment; conn delivers the next
+Background is declaring capacity for another Assignment; Maestro delivers the next
 queued Assignment immediately.
 
 **Job ID is mandatory in all player signals** — with multiple active Jobs per player,
 the Job ID cannot be inferred from the player ID alone. Done, Blocked, and Background
 signals must all reference `$MAESTRO_JOB_ID` explicitly.
 
-**Assignment payload injection:** conn injects both into every Assignment delivered:
+**Assignment payload injection:** Maestro injects both into every Assignment delivered:
 - `$MAESTRO_JOB_ID` — the Job ID for signal referencing
-- `$MAESTRO_SCRATCHPAD` — the conn-managed scratchpad path for this Job
+- `$MAESTRO_SCRATCHPAD` — the Maestro-managed scratchpad path for this Job
+
+**Note — LLM agnosticism:** The current injection format appends these as text
+lines to the assignment payload (convention-based). This works for any
+text-reading process but is a soft coupling: it assumes the player reads the
+appended lines as metadata rather than receiving them as real process environment
+variables. The stronger design — and the right direction for a general runtime —
+is to pass `$MAESTRO_JOB_ID` and `$MAESTRO_SCRATCHPAD` as actual OS environment
+variables set at spawn time. That removes the convention dependency and makes the
+player interface genuinely process-agnostic. Not blocking for Phase 1; tracked
+here for Phase 2 when the spawn mechanism is built.
 
 **Conductor visibility:** the notification surface shows the full Job list per player
 with status. A player with multiple active Jobs is `StatusRunning`; Job count and

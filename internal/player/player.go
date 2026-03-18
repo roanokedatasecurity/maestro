@@ -87,7 +87,7 @@ func (svc *Service) SetLastSeen(id string) error {
 	return nil
 }
 
-// MarkDead transitions the player to Dead. Called when a PTY process exits.
+// MarkDead transitions the player to Dead. Called when a player's terminal process exits.
 // Idempotent — calling it on an already-Dead player is a no-op (no error).
 func (svc *Service) MarkDead(id string) error {
 	p, err := svc.store.GetPlayer(id)
