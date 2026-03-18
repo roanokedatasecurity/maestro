@@ -1,0 +1,17 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Go
+*.exe
+*.test
+*.out
+dist/
+
+# SQLite
+*.db
+*.sqlite
+
+# Runtime
+/tmp/
