@@ -125,6 +125,21 @@ func (s *Store) SetJobDeadLetter(id string) error {
 	return nil
 }
 
+// SetJobPayload overwrites the payload field for a job. The bus calls this after
+// creating a Job to persist the $MAESTRO_JOB_ID / $MAESTRO_SCRATCHPAD injected payload.
+func (s *Store) SetJobPayload(id, payload string) error {
+	res, err := s.db.Exec(
+		"UPDATE jobs SET payload = ? WHERE id = ?", payload, id,
+	)
+	if err != nil {
+		return fmt.Errorf("set job payload: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("set job payload: job %q not found", id)
+	}
+	return nil
+}
+
 // ListJobs returns all jobs ordered by created_at ascending.
 func (s *Store) ListJobs() ([]*Job, error) {
 	rows, err := s.db.Query(`
@@ -162,6 +177,22 @@ func (s *Store) ListJobsByStatus(status JobStatus) ([]*Job, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list jobs by status: %w", err)
+	}
+	defer rows.Close()
+	return scanJobs(rows)
+}
+
+// ListJobsByPlayerAndStatus returns all jobs for a player with the given status,
+// ordered oldest first.
+func (s *Store) ListJobsByPlayerAndStatus(playerID string, status JobStatus) ([]*Job, error) {
+	rows, err := s.db.Query(`
+		SELECT id, message_id, player_id, player_name, payload, scratchpad_path,
+		       status, approval_metadata, created_at, completed_at
+		FROM jobs WHERE player_id = ? AND status = ? ORDER BY created_at ASC`,
+		playerID, string(status),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs by player and status: %w", err)
 	}
 	defer rows.Close()
 	return scanJobs(rows)

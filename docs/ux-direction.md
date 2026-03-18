@@ -78,9 +78,12 @@ begins.
 
 The Maestro window has a persistent tab bar:
 
-- **Conductor tab** — always present, always pinned leftmost. Contains the
-  Conductor's xterm.js console, the notification inbox badge/panel, and the
-  approval surface. This is Kirt's primary interaction pane.
+- **Conductor tab** — always present. Contains the Conductor's xterm.js
+  console, the notification inbox badge/panel, and the approval surface.
+  Tab position is agent-controlled — the Conductor declares its layout at
+  boot via `PUT /layout`; Maestro renders whatever arrangement the agentic
+  profile specifies. No hard-coded position. See `docs/architecture.md` for
+  the full Maestro vs. agentic profile responsibility boundary.
 - **Player tabs** — open when a Player is spawned, persist (as Dead) after the
   Player exits until explicitly dismissed. Tab label shows Player name + status
   indicator.

@@ -13,8 +13,8 @@ of work: it receives an Assignment, executes, signals Done, goes Idle. Monitor i
 daemon — it runs continuously, polling channels and synthesizing signal for the
 Conductor.
 
-Without dedicated infrastructure, Monitor implements its polling loop inside a PTY.
-That loop is alive only as long as the Maestro session is. Three failure modes follow:
+Without dedicated infrastructure, Monitor implements its polling loop inside its
+terminal process. That loop is alive only as long as the Maestro session is. Three failure modes follow:
 
 - **Time-triggered work misses its window.** The 9:20 PM RSA synthesis, the weekly
   Sprint Demo DM to Siva, the RSA morning brief — if no session is active when the
@@ -78,7 +78,7 @@ The Conductor never sees raw cron output — only signal the Player decides to s
 
 ### Session Boundary Behavior
 
-**Phase 1 (single process):** The Maestro scheduler goroutine runs while the TUI is
+**Phase 1 (single process):** The Maestro scheduler goroutine runs while the app is
 active. Crons fire within active sessions. At session start, Maestro checks
 `last_fired_at` vs `next_fire_at` for all registered crons and generates synthetic
 `CronFired` events for any windows missed while the process was down. This covers
@@ -87,7 +87,7 @@ most catch-up cases without requiring a background daemon.
 **Phase 2 (detach/reattach):** Cron registrations persist in SQLite and survive
 restart. The scheduler runs continuously as part of the backend service — firing
 scripts and accumulating `CronFired` events in the notification queue regardless of
-whether a TUI session is active. When the Conductor reconnects, it sees the full
+whether an app session is active. When the Conductor reconnects, it sees the full
 backlog. This is the complete solution to between-session monitoring.
 
 ---

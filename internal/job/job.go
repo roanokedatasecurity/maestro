@@ -12,7 +12,16 @@ import (
 	"github.com/roanokedatasecurity/maestro/internal/store"
 )
 
-const scratchpadDir = "/tmp/maestro-scratch"
+// scratchpadBase returns the persistent scratchpad directory (~/.maestro/scratch).
+// Scratchpads must survive Maestro restarts — /tmp is cleared on OS reboot and
+// would destroy dead-letter recovery artifacts still referenced by Job records.
+func scratchpadBase() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".maestro", "scratch"), nil
+}
 
 // legalTransitions defines every allowed JobStatus → JobStatus move.
 // Complete and DeadLetter are terminal — no outbound transitions.
@@ -43,10 +52,14 @@ func New(s *store.Store) *Service {
 }
 
 // Create registers a new InProgress Job for a delivered Assignment.
-// It assigns a scratchpad path (/tmp/maestro-scratch/<job-id>.md) and ensures
+// It assigns a scratchpad path (~/.maestro/scratch/<job-id>.md) and ensures
 // the scratchpad directory exists before persisting via the store.
 func (svc *Service) Create(messageID, playerID, playerName, payload string) (*store.Job, error) {
-	if err := os.MkdirAll(scratchpadDir, 0o755); err != nil {
+	dir, err := scratchpadBase()
+	if err != nil {
+		return nil, fmt.Errorf("job.Create: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("job.Create: ensure scratchpad dir: %w", err)
 	}
 
@@ -56,7 +69,7 @@ func (svc *Service) Create(messageID, playerID, playerName, payload string) (*st
 		return nil, fmt.Errorf("job.Create: %w", err)
 	}
 
-	scratchpad := filepath.Join(scratchpadDir, j.ID+".md")
+	scratchpad := filepath.Join(dir, j.ID+".md")
 	if err := svc.store.SetJobScratchpad(j.ID, scratchpad); err != nil {
 		return nil, fmt.Errorf("job.Create: set scratchpad: %w", err)
 	}
