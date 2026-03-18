@@ -113,7 +113,7 @@ Maestro persists queue and job state to SQLite. If you restart, Maestro recovers
 
 **Players may background jobs.** A player isn't limited to one active job. Background a job, take a new assignment, resume — the bus tracks it all. Good resource utilization without losing visibility.
 
-**Proper message bus.** Fire-and-forget producers, priority queues, state-gated delivery, dead-letter routing. No more PTY injection. No more message loss on a busy player.
+**Proper message bus.** Fire-and-forget producers, priority queues, state-gated delivery, dead-letter routing. No more terminal injection. No more message loss on a busy player.
 
 **The AI manages the session, not just a task.** The Conductor is a first-class participant in orchestration — it spawns players, issues assignments, reads job outputs, reshapes the workspace, routes signals. The human sets direction; the AI runs the operational machinery.
 
@@ -157,7 +157,7 @@ Early development. Design complete. Platform layer in active construction.
 | `internal/store/` | ✅ Complete — 5-table schema, typed CRUD, embedded migrations, 12 tests green |
 | `internal/player/` | ✅ Complete — Player model, state machine, Conductor uniqueness, 8 tests green |
 | `internal/job/` | ✅ Complete — Job lifecycle, scratchpad management, state machine, 7 tests green |
-| `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 10 tests green |
+| `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 11 tests green |
 | `internal/api/` | 🔲 Next |
 | `cmd/maestro/` | 🔲 Pending |
 
