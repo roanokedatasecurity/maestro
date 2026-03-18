@@ -125,6 +125,21 @@ func (s *Store) SetJobDeadLetter(id string) error {
 	return nil
 }
 
+// SetJobPayload overwrites the payload field for a job. The bus calls this after
+// creating a Job to persist the $MAESTRO_JOB_ID / $MAESTRO_SCRATCHPAD injected payload.
+func (s *Store) SetJobPayload(id, payload string) error {
+	res, err := s.db.Exec(
+		"UPDATE jobs SET payload = ? WHERE id = ?", payload, id,
+	)
+	if err != nil {
+		return fmt.Errorf("set job payload: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("set job payload: job %q not found", id)
+	}
+	return nil
+}
+
 // ListJobs returns all jobs ordered by created_at ascending.
 func (s *Store) ListJobs() ([]*Job, error) {
 	rows, err := s.db.Query(`
