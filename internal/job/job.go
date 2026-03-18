@@ -59,7 +59,7 @@ func (svc *Service) Create(messageID, playerID, playerName, payload string) (*st
 	if err != nil {
 		return nil, fmt.Errorf("job.Create: %w", err)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("job.Create: ensure scratchpad dir: %w", err)
 	}
 

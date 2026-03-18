@@ -74,11 +74,11 @@ func (s *Store) migrate() error {
 			continue // already applied
 		}
 
-		sql, err := migrationsFS.ReadFile("migrations/" + version)
+		migrationSQL, err := migrationsFS.ReadFile("migrations/" + version)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", version, err)
 		}
-		if _, err := s.db.Exec(string(sql)); err != nil {
+		if _, err := s.db.Exec(string(migrationSQL)); err != nil {
 			return fmt.Errorf("apply migration %s: %w", version, err)
 		}
 		if _, err := s.db.Exec(
