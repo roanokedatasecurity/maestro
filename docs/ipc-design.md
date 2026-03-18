@@ -411,3 +411,9 @@ states are visible in the `ctrl+n` panel.
 **Policy guard:** the Conductor's approval policy may include a configurable
 max-concurrent-Jobs-per-player limit — a policy dial, not a hard infrastructure
 constraint — to prevent runaway accumulation.
+
+---
+
+## Related Design Docs
+
+- [`docs/cron-design.md`](cron-design.md) — Scheduled work infrastructure: the cron API, Monitor as coordinator, scripts as committed artifacts, and the `cron_jobs` store table. Addresses the between-session monitoring gap and generalizes to any Player that needs time-triggered work.
