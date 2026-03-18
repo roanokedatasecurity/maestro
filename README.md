@@ -155,8 +155,8 @@ Early development. Design complete. Platform layer in active construction.
 | Layer | Status |
 |---|---|
 | `internal/store/` | ✅ Complete — 5-table schema, typed CRUD, embedded migrations, 12 tests green |
-| `internal/player/` | 🔲 Next |
-| `internal/job/` | 🔲 Pending |
+| `internal/player/` | ✅ Complete — Player model, state machine, Conductor uniqueness, 8 tests green |
+| `internal/job/` | 🔲 Next |
 | `internal/bus/` | 🔲 Pending |
 | `internal/api/` | 🔲 Pending |
 | `cmd/maestro/` | 🔲 Pending |
