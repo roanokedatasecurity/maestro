@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -22,7 +23,7 @@ func openTestStore(t *testing.T) *Store {
 func TestOpen_AllTablesCreated(t *testing.T) {
 	s := openTestStore(t)
 
-	want := []string{"schema_migrations", "messages", "players", "jobs", "notifications", "approvals"}
+	want := []string{"schema_migrations", "messages", "players", "jobs", "notifications", "approvals", "cron_jobs"}
 	for _, table := range want {
 		var name string
 		err := s.db.QueryRow(
@@ -402,6 +403,101 @@ func TestNotifications_CRUD(t *testing.T) {
 	}
 	if len(unread2) != 0 {
 		t.Errorf("ListUnreadNotifications after read len = %d, want 0", len(unread2))
+	}
+}
+
+// TestCronJobCRUD covers create, get, list, update fired timestamps, and delete.
+func TestCronJobCRUD(t *testing.T) {
+	s := openTestStore(t)
+
+	ownerID := "player-abc"
+	cj := CronJob{
+		ID:             newID(),
+		Name:           "nightly-report",
+		ScriptPath:     "/scripts/nightly.sh",
+		Schedule:       "0 2 * * *",
+		ScratchpadPath: "/tmp/maestro/cron/nightly.md",
+		OwnerPlayerID:  &ownerID,
+	}
+
+	if err := s.CreateCronJob(cj); err != nil {
+		t.Fatalf("CreateCronJob: %v", err)
+	}
+
+	// GetCronJob
+	got, err := s.GetCronJob(cj.ID)
+	if err != nil {
+		t.Fatalf("GetCronJob: %v", err)
+	}
+	if got.Name != cj.Name {
+		t.Errorf("Name = %q, want %q", got.Name, cj.Name)
+	}
+	if got.Schedule != cj.Schedule {
+		t.Errorf("Schedule = %q, want %q", got.Schedule, cj.Schedule)
+	}
+	if got.OwnerPlayerID == nil || *got.OwnerPlayerID != ownerID {
+		t.Errorf("OwnerPlayerID = %v, want %q", got.OwnerPlayerID, ownerID)
+	}
+	if got.LastFiredAt != nil {
+		t.Error("LastFiredAt should be nil initially")
+	}
+	if got.NextFireAt != nil {
+		t.Error("NextFireAt should be nil initially")
+	}
+	if got.CreatedAt.IsZero() {
+		t.Error("CreatedAt should not be zero")
+	}
+
+	// ListCronJobs
+	list, err := s.ListCronJobs()
+	if err != nil {
+		t.Fatalf("ListCronJobs: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListCronJobs len = %d, want 1", len(list))
+	}
+	if list[0].ID != cj.ID {
+		t.Errorf("list[0].ID = %q, want %q", list[0].ID, cj.ID)
+	}
+
+	// UpdateCronJobFired
+	lastFired := time.Now().UTC().Truncate(time.Second)
+	nextFire := lastFired.Add(24 * time.Hour)
+	if err := s.UpdateCronJobFired(cj.ID, lastFired, nextFire); err != nil {
+		t.Fatalf("UpdateCronJobFired: %v", err)
+	}
+	updated, err := s.GetCronJob(cj.ID)
+	if err != nil {
+		t.Fatalf("GetCronJob after fired update: %v", err)
+	}
+	if updated.LastFiredAt == nil {
+		t.Fatal("LastFiredAt should be set after UpdateCronJobFired")
+	}
+	if !updated.LastFiredAt.Equal(lastFired) {
+		t.Errorf("LastFiredAt = %v, want %v", updated.LastFiredAt, lastFired)
+	}
+	if updated.NextFireAt == nil {
+		t.Fatal("NextFireAt should be set after UpdateCronJobFired")
+	}
+	if !updated.NextFireAt.Equal(nextFire) {
+		t.Errorf("NextFireAt = %v, want %v", updated.NextFireAt, nextFire)
+	}
+
+	// DeleteCronJob
+	if err := s.DeleteCronJob(cj.ID); err != nil {
+		t.Fatalf("DeleteCronJob: %v", err)
+	}
+	list2, err := s.ListCronJobs()
+	if err != nil {
+		t.Fatalf("ListCronJobs after delete: %v", err)
+	}
+	if len(list2) != 0 {
+		t.Errorf("ListCronJobs after delete len = %d, want 0", len(list2))
+	}
+
+	// GetCronJob on deleted ID should error
+	if _, err := s.GetCronJob(cj.ID); err == nil {
+		t.Error("GetCronJob on deleted ID should return error")
 	}
 }
 
