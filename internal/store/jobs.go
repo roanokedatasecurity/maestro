@@ -97,6 +97,76 @@ func (s *Store) ListActiveJobs(playerID string) ([]*Job, error) {
 	return scanJobs(rows)
 }
 
+// SetJobScratchpad sets the scratchpad path for a job.
+func (s *Store) SetJobScratchpad(id, path string) error {
+	res, err := s.db.Exec(
+		"UPDATE jobs SET scratchpad_path = ? WHERE id = ?", path, id,
+	)
+	if err != nil {
+		return fmt.Errorf("set job scratchpad: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("set job scratchpad: job %q not found", id)
+	}
+	return nil
+}
+
+// SetJobDeadLetter transitions a job to DeadLetter and stamps completed_at.
+func (s *Store) SetJobDeadLetter(id string) error {
+	res, err := s.db.Exec(
+		"UPDATE jobs SET status = 'DeadLetter', completed_at = datetime('now') WHERE id = ?", id,
+	)
+	if err != nil {
+		return fmt.Errorf("set job dead letter: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("set job dead letter: job %q not found", id)
+	}
+	return nil
+}
+
+// ListJobs returns all jobs ordered by created_at ascending.
+func (s *Store) ListJobs() ([]*Job, error) {
+	rows, err := s.db.Query(`
+		SELECT id, message_id, player_id, player_name, payload, scratchpad_path,
+		       status, approval_metadata, created_at, completed_at
+		FROM jobs ORDER BY created_at ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs: %w", err)
+	}
+	defer rows.Close()
+	return scanJobs(rows)
+}
+
+// ListJobsByPlayer returns all jobs for a given player, ordered oldest first.
+func (s *Store) ListJobsByPlayer(playerID string) ([]*Job, error) {
+	rows, err := s.db.Query(`
+		SELECT id, message_id, player_id, player_name, payload, scratchpad_path,
+		       status, approval_metadata, created_at, completed_at
+		FROM jobs WHERE player_id = ? ORDER BY created_at ASC`, playerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs by player: %w", err)
+	}
+	defer rows.Close()
+	return scanJobs(rows)
+}
+
+// ListJobsByStatus returns all jobs with the given status, ordered oldest first.
+func (s *Store) ListJobsByStatus(status JobStatus) ([]*Job, error) {
+	rows, err := s.db.Query(`
+		SELECT id, message_id, player_id, player_name, payload, scratchpad_path,
+		       status, approval_metadata, created_at, completed_at
+		FROM jobs WHERE status = ? ORDER BY created_at ASC`, string(status),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs by status: %w", err)
+	}
+	defer rows.Close()
+	return scanJobs(rows)
+}
+
 // ListDeadLetterJobs returns all DeadLetter jobs, ordered oldest first.
 func (s *Store) ListDeadLetterJobs() ([]*Job, error) {
 	rows, err := s.db.Query(`
