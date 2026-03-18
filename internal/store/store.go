@@ -108,8 +108,14 @@ func nullTime(nt *sql.NullTime) *time.Time {
 	return &nt.Time
 }
 
-// parseTime parses a non-nullable DATETIME column.
+// parseTime parses a non-nullable DATETIME column. The modernc SQLite driver
+// returns datetime values in RFC3339 format ("2006-01-02T15:04:05Z"); we also
+// accept the bare SQLite format for forward-compatibility.
 func parseTime(s string) time.Time {
-	t, _ := time.Parse("2006-01-02 15:04:05", s)
-	return t
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }

@@ -137,6 +137,31 @@ func TestMessages_PriorityOrdering(t *testing.T) {
 	}
 }
 
+// TestTimeFieldsNonZero guards against the parseTime regression where the
+// modernc SQLite driver emits RFC3339 ("2006-01-02T15:04:05Z") but the
+// original parseTime only accepted "2006-01-02 15:04:05", silently returning
+// time.Time{} for every CreatedAt / LastSeenAt field.
+func TestTimeFieldsNonZero(t *testing.T) {
+	s := openTestStore(t)
+
+	p, err := s.CreatePlayer("time-check", false)
+	if err != nil {
+		t.Fatalf("CreatePlayer: %v", err)
+	}
+
+	got, err := s.GetPlayer(p.ID)
+	if err != nil {
+		t.Fatalf("GetPlayer: %v", err)
+	}
+
+	if got.CreatedAt.IsZero() {
+		t.Error("CreatedAt is zero — parseTime failed to parse the driver's datetime format")
+	}
+	if got.LastSeenAt.IsZero() {
+		t.Error("LastSeenAt is zero — parseTime failed to parse the driver's datetime format")
+	}
+}
+
 // TestPlayers_CRUD covers create, get, update status, last seen, and list.
 func TestPlayers_CRUD(t *testing.T) {
 	s := openTestStore(t)
