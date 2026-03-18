@@ -1,26 +1,164 @@
 # Maestro
 
-AI orchestration platform. Conductor + Players, durable message bus, persistent job tracking.
+> *The maestro gives the downbeat. The players follow.*
+
+## The collaboration model
+
+Most AI collaboration is one-on-one: you and your AI in a single session, working through problems sequentially. Maestro changes the unit of collaboration.
+
+The AI running as **Conductor** can assemble an ensemble — Coders, Researchers, Monitors, PR Managers — arrange them into a split-pane workspace, assign work via a durable message bus, and drive the entire operational session end-to-end. You set direction. The AI builds and runs the machine that executes it.
+
+You stay in control at the decisions that matter: meaningful approvals based on risk and policy you define, reviewing work at natural checkpoints, confirming direction. Everything between those checkpoints — the spawning, the coordination, the monitoring, the routing, the cleanup — the Conductor handles. The session doesn't wait for you to set it up. It's already running when you arrive.
+
+Maestro is the infrastructure that makes this possible: a terminal multiplexer with a durable message bus, persistent job tracking, and a Unix socket API that every player inherits — giving the Conductor a live, stateful control plane over the entire ensemble.
+
+---
+
+## What this looks like in practice
+
+You open a session. The Conductor wakes up, reads its role profile from memory, sets the layout, spawns its standard ensemble (Researcher, Tester, Monitor), and presents a status brief — before you type anything. If you're rejoining a session after a restart, it surfaces a recovery brief: jobs that were in-progress, assignments still queued, any dead-letter work awaiting your decision.
+
+You say: *"Let's implement the new API endpoint."*
+
+The Conductor reads the task, confirms design decisions are locked, and issues an Assignment to a Coder player via the message bus. The Assignment creates a Job record — scratchpad path assigned, tracked in durable storage. The Conductor adds a pane for the coder and tells you the topology is set. While the coder works, the Conductor keeps going — answering questions, reading signals from the Monitor, handling other tasks.
+
+When the coder finishes, it signals Done. The signal routes to the Conductor's notification queue — not injected into the Conductor's PTY, surfaced as a structured notification the Conductor reads at its own pace. The Conductor reviews the scratchpad, raises a PR, and surfaces a merge confirmation to you. You approve. The PR merges, the job is marked complete, and the Conductor creates a verification ticket.
+
+You were involved at three points: setting direction, approving the merge, and confirming verification. The AI ran the rest.
+
+---
+
+## For the AI reading this
+
+If `$MAESTRO_SOCKET` is set in your environment, you are running inside Maestro. You are the Conductor. You have a stateful control plane.
+
+**Verify Maestro presence by checking `$MAESTRO_SOCKET` directly** — never infer it from conversation context or session history.
+
+**Your job as Conductor** is decomposition and synthesis. You break work into roles, issue Assignments via the message bus, read Job scratchpads, and synthesize results. You do not do the implementation or investigation yourself — you delegate and stay focused on coordination.
+
+**The data plane is Jobs and scratchpads.** Every Assignment creates a Job with a conn-managed scratchpad path injected as `$MAESTRO_SCRATCHPAD`. Players write there. You read Jobs via the API — no file naming agreements needed.
+
+**The control plane is the message bus.** Issue Assignments, receive Done/Blocked/Background signals, inspect queues and jobs — all via the Unix socket API. Signals route to your notification queue, not your PTY.
+
+**Routing is enforced by the infrastructure:**
+- You (Conductor) → Players: Assignments
+- Players → You: Done, Blocked, Background signals
+- Players → Players: not permitted
+
+**When a player signals Done or Blocked,** it appears in your notification queue. High-priority signals (Blocked with `wait=true`) surface as an approval overlay. For approvals, the infrastructure scores the request against your policy — you only see it if the confidence score falls below your threshold or a bright-line rule requires human judgment.
+
+**Players may background a Job** and receive a new Assignment — signal `Background` to declare capacity. Every signal must reference `$MAESTRO_JOB_ID` so the bus routes it to the correct Job.
+
+---
+
+## The roles
+
+**Session topology is not hardcoded in Maestro.** Each human+AI pair defines their own player roles — what the standard ensemble looks like, what on-demand players get spawned and when. The AI reads those from its memory files at session start and bootstraps accordingly. Maestro stays dumb (infrastructure); the agent stays smart (knows the roles, the coordination model, the domain context).
+
+### Example: software engineering — standard ensemble
+
+| Player | Role | Auto-approves |
+|---|---|---|
+| **Conductor** | Full context, decomposition, coordination, synthesis | (managed via Maestro UI) |
+| **Researcher** | Investigation and synthesis, read-only | Read, Glob, Grep, WebSearch, WebFetch |
+| **Tester** | CI validation, test writing, failure analysis | Bash, Read, Glob, Grep, Edit, Write |
+| **Monitor** | Slack polling, DM checks, PR watches — frees Conductor from interrupts | Bash |
+
+### Example: software engineering — on-demand players
+
+| Player | Role | Auto-approves |
+|---|---|---|
+| **Coder** | Single-ticket implementation, worktree-isolated | Bash, Read, Glob, Grep, Edit, Write |
+| **PR Monitor** | Watches one PR: CI, review comments, reviewer status | Bash |
+| **PR Manager** | Takes action on a PR: fixes, commits, requests merge | Bash, Read, Glob, Grep, Edit, Write |
+
+### The pattern generalizes
+
+The Conductor + Player model applies to any domain where work involves research, drafting, monitoring, and coordination. A **Product Manager** Conductor runs Researcher, Scribe, Analyst, and Monitor players. A **CEO** Conductor runs Intel, Deal-Prep, Comms, and Pipeline-Monitor players. The topology reflects the actual shape of the work.
+
+---
+
+## The human experience
+
+### What you own
+
+- **Direction** — set the agenda, assign priorities, decide what matters
+- **Meaningful approvals** — decisions scored against your policy; you see what needs judgment, not everything
+- **Verification** — the final check that only you can do
+
+### What the AI owns
+
+- Session setup and recovery — topology, layout, boot sequence, reattach brief
+- Task decomposition — breaking work into the right player roles
+- Coordination — reading scratchpads, synthesizing results, routing signals
+- Operational loops — monitoring, polling, lifecycle management
+
+### Policy-brokered approvals
+
+Approvals in Maestro are not binary ctrl+y/ctrl+n on every signal. The Conductor scores each blocked request across multiple dimensions (reversibility, scope, confidence, precedent, authorization) and Maestro compares the scorecard against a policy you configure. The Conductor handles what it can; you see what requires your judgment. Every decision — autonomous or human — is a durable record.
+
+### Durable state
+
+Maestro persists queue and job state to SQLite. If you restart, Maestro recovers: dead-letter jobs from the previous session surface in your notification queue with scratchpad context intact. Assignments still queued remain queued. You pick up where you left off.
+
+---
+
+## What's novel
+
+**Durable AI orchestration.** Queue and job state persists across restarts. The session is recoverable, not ephemeral — dead-letter jobs, in-progress work, and pending assignments survive conn exit. Foundation for true detach/reattach.
+
+**The Conductor is the parent agent, not first-among-equals.** Maestro enforces this at the infrastructure level: routing rules are structural, not convention. Players cannot message each other or self-authorize work. The Conductor has full visibility; players see only their own queue and jobs.
+
+**Policy-brokered approval.** Multi-dimensional scoring replaces binary ctrl+y fatigue. The human defines the policy once; the Conductor handles what it can; the human is involved when judgment is genuinely required.
+
+**Players may background jobs.** A player isn't limited to one active job. Background a job, take a new assignment, resume — the bus tracks it all. Good resource utilization without losing visibility.
+
+**Proper message bus.** Fire-and-forget producers, priority queues, state-gated delivery, dead-letter routing. No more PTY injection. No more message loss on a busy player.
+
+**The AI manages the session, not just a task.** The Conductor is a first-class participant in orchestration — it spawns players, issues assignments, reads job outputs, reshapes the workspace, routes signals. The human sets direction; the AI runs the operational machinery.
+
+---
+
+## Prior art
+
+- [tazuna](https://github.com/oshiteku/tazuna) — closest architecture (Rust/ratatui, native PTY, hooks); no durable state, no message bus, no agent API
+- [claude-squad](https://github.com/smtg-ai/claude-squad) — most mature multi-agent manager; tmux-backed, auto-accept daemon, no agent control plane
+- [plural](https://github.com/zhubert/plural) — parallel sessions with branch-per-session model; tmux-backed
+- [clark](https://github.com/brianirish/clark) — task-distribution-oriented; tmux-backed
+- [conn](https://github.com/roanokedatasecurity/conn) — Maestro's predecessor; proved the Conductor/Player pattern in production; Maestro is the architectural rewrite
+
+---
 
 ## Architecture
 
-Maestro is a multi-player AI orchestration runtime built around three core ideas:
+See [`docs/ipc-design.md`](docs/ipc-design.md) for the full message bus design and all locked architectural decisions.
 
-- **Conductor** — the parent agent. Authorizes all work, has full visibility, routes signals. No Conductor, no session.
-- **Players** — execute Assignments issued by the Conductor. Report Done, Blocked, or Background. Never communicate laterally.
-- **Message Bus** — durable, priority-queued, SQLite-backed. Producers fire-and-forget. The infrastructure owns delivery.
-
-See [`docs/ipc-design.md`](docs/ipc-design.md) for the full design.
-
-## Build order (platform first, UI later)
+**Build order — platform first, UI last:**
 
 ```
-internal/store/    SQLite schema + migrations
+internal/store/    SQLite schema + migrations (messages, jobs, players)
 internal/player/   Player model, status state machine
-internal/job/      Job lifecycle (InProgress → Complete | Backgrounded | DeadLetter)
-internal/bus/      Message bus, routing rules, delivery engine
+internal/job/      Job lifecycle (InProgress → Backgrounded | Complete | DeadLetter)
+internal/bus/      Message bus: routing enforcement, priority queuing, delivery engine
 internal/api/      Unix socket HTTP server (IPC endpoints)
-cmd/maestro/       Main entry point
+cmd/maestro/       Main entry point, wires everything together
 ```
 
-Tests are written alongside each layer. No UI work begins until platform has a green `go test ./...`.
+Tests are written alongside each layer. `go test ./...` is green before any UI work begins.
+
+---
+
+## Status
+
+Early development. Design complete. Platform layer in active construction.
+
+| Layer | Status |
+|---|---|
+| `internal/store/` | ✅ Complete — 5-table schema, typed CRUD, embedded migrations, 12 tests green |
+| `internal/player/` | 🔲 Next |
+| `internal/job/` | 🔲 Pending |
+| `internal/bus/` | 🔲 Pending |
+| `internal/api/` | 🔲 Pending |
+| `cmd/maestro/` | 🔲 Pending |
+
+See [`docs/process.md`](docs/process.md) for development process and PR conventions.
