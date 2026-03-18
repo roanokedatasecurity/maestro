@@ -293,7 +293,23 @@ authorization hierarchy. conn is opinionated about this. No Conductor, no sessio
 - **Dead-letter:** always routes to the Conductor — the only entity that can decide
   what to do with failed work.
 
-### 3. Durable persistence from day one
+### 3. Conductor IPC properties are infrastructure concerns — layout position is not
+
+Maestro is opinionated about the Conductor at the IPC level: there must be exactly
+one active Conductor, the session is invalid without one, and the Conductor has
+structural privileges (routing authority, full Job/queue visibility, dead-letter
+recovery). These are enforced by Maestro infrastructure.
+
+Maestro is **not** opinionated about where the Conductor pane lives in the layout,
+which Players are spawned at boot, or what the split ratios are. Those are agentic
+profile decisions — declared by the Conductor at session start via `PUT /layout`
+and the spawn API. A different Conductor persona could choose an entirely different
+workspace arrangement. Maestro renders whatever the Conductor declares.
+
+See [`docs/architecture.md`](architecture.md) for the full Maestro vs. agentic
+profile responsibility boundary.
+
+### 4. Durable persistence from day one
 
 Queue and Job records are stored in SQLite from the first implementation. No
 in-memory-first shortcut. The schema is defined once and carries forward through
