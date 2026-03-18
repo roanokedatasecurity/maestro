@@ -152,12 +152,14 @@ Tests are written alongside each layer. `go test ./...` is green before any UI w
 
 Early development. Design complete. Platform layer in active construction.
 
+All packages hold ≥85% test coverage — enforced policy for AI-generated code.
+
 | Layer | Status |
 |---|---|
-| `internal/store/` | ✅ Complete — 5-table schema, typed CRUD, embedded migrations, 12 tests green |
-| `internal/player/` | ✅ Complete — Player model, state machine, Conductor uniqueness, 8 tests green |
-| `internal/job/` | ✅ Complete — Job lifecycle, scratchpad management, state machine, 7 tests green |
-| `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 11 tests green |
+| `internal/store/` | ✅ Complete — 5-table schema, typed CRUD, embedded migrations, 87.8% coverage |
+| `internal/player/` | ✅ Complete — Player model, state machine, Conductor uniqueness, 91.9% coverage |
+| `internal/job/` | ✅ Complete — Job lifecycle, scratchpad management, state machine, 85.4% coverage |
+| `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 85.4% coverage |
 | `internal/api/` | 🔲 Next |
 | `cmd/maestro/` | 🔲 Pending |
 
