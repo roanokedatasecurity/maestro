@@ -253,6 +253,92 @@ func TestListByPlayer(t *testing.T) {
 	}
 }
 
+// TestList verifies that job.Service.List returns all jobs across all players.
+func TestList(t *testing.T) {
+	svc := newSvc(t)
+
+	_, err := svc.Create("msg-L1", "player-1", "Coder", "first")
+	if err != nil {
+		t.Fatalf("Create L1: %v", err)
+	}
+	_, err = svc.Create("msg-L2", "player-2", "Researcher", "second")
+	if err != nil {
+		t.Fatalf("Create L2: %v", err)
+	}
+
+	jobs, err := svc.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Errorf("expected 2 jobs, got %d", len(jobs))
+	}
+}
+
+// TestGet_UnknownID verifies Get returns an error for a non-existent job ID.
+func TestGet_UnknownID(t *testing.T) {
+	svc := newSvc(t)
+	_, err := svc.Get("does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for unknown job ID, got nil")
+	}
+}
+
+// TestTransition_UnknownID verifies Transition returns an error for a non-existent job ID.
+func TestTransition_UnknownID(t *testing.T) {
+	svc := newSvc(t)
+	err := svc.Transition("does-not-exist", store.JobStatusComplete)
+	if err == nil {
+		t.Fatal("expected error for unknown job ID, got nil")
+	}
+}
+
+// TestList_ClosedStore verifies that List propagates a store error.
+func TestList_ClosedStore(t *testing.T) {
+	s := openTestStore(t)
+	svc := job.New(s)
+	s.Close() // close before calling List to trigger DB error
+	_, err := svc.List()
+	if err == nil {
+		t.Fatal("expected error from closed store, got nil")
+	}
+}
+
+// TestListByPlayer_ClosedStore verifies that ListByPlayer propagates a store error.
+func TestListByPlayer_ClosedStore(t *testing.T) {
+	s := openTestStore(t)
+	svc := job.New(s)
+	s.Close()
+	_, err := svc.ListByPlayer("player-1")
+	if err == nil {
+		t.Fatal("expected error from closed store, got nil")
+	}
+}
+
+// TestListByStatus_ClosedStore verifies that ListByStatus propagates a store error.
+func TestListByStatus_ClosedStore(t *testing.T) {
+	s := openTestStore(t)
+	svc := job.New(s)
+	s.Close()
+	_, err := svc.ListByStatus(store.JobStatusInProgress)
+	if err == nil {
+		t.Fatal("expected error from closed store, got nil")
+	}
+}
+
+// TestCreate_ClosedStore verifies that Create propagates a CreateJob error.
+// Note: scratchpadBase() and MkdirAll are exercised before the store call, so the
+// error is triggered at store.CreateJob.
+func TestCreate_ClosedStore(t *testing.T) {
+	s := openTestStore(t)
+	svc := job.New(s)
+	s.Close()
+	_, err := svc.Create("msg-cls", "p1", "Coder", "work")
+	if err == nil {
+		t.Fatal("expected error from closed store, got nil")
+	}
+}
+
 func TestListByStatus(t *testing.T) {
 	svc := newSvc(t)
 
