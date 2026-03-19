@@ -57,17 +57,17 @@ func (s *Server) handleGetPlayer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
-type sendMessageReq struct {
+type sendAssignmentReq struct {
 	Text     string `json:"text"`
 	Priority string `json:"priority"` // "normal" | "high"
 }
 
-// handleSendMessage handles POST /players/{id}/message.
+// handleSendAssignment handles POST /players/{id}/assignment.
 // Returns 204 if the player was Idle (delivered immediately) or 202 if the
 // player was busy (enqueued for later delivery).
-func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSendAssignment(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req sendMessageReq
+	var req sendAssignmentReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Text == "" {
 		http.Error(w, "bad request: text is required", http.StatusBadRequest)
 		return
@@ -310,7 +310,7 @@ func (s *Server) handleDecide(w http.ResponseWriter, r *http.Request) {
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 // findConductor returns the active (non-Dead) Conductor player, or an error if
-// none is registered. Used by handleSendMessage to determine the from-player for
+// none is registered. Used by handleSendAssignment to determine the from-player for
 // Assignment routing.
 func (s *Server) findConductor() (*store.Player, error) {
 	players, err := s.store.ListPlayers()

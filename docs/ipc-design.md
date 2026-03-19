@@ -224,7 +224,7 @@ The Conductor decides. Maestro does not auto-reassign.
 Same endpoint surface — different internals.
 
 ```
-POST /players/:id/message       → enqueue Assignment (Conductor only)
+POST /players/:id/assignment    → enqueue Assignment (Conductor only)
 { "text": "...", "priority": "normal" }
 → 202 Accepted   (player busy — enqueued, Job will be created on delivery)
 → 204 No Content (player idle — delivered immediately, Job created)
@@ -254,7 +254,7 @@ GET  /jobs/:id                  → inspect a specific Job
 | Ticket | Resolution |
 |---|---|
 | CONN-67 | Done/blocked no longer inject into Conductor PTY — architectural fix |
-| CONN-49 | `/message` → conductor guard is moot — Conductor queue is UI-only |
+| CONN-49 | `/assignment` → conductor guard is moot — Conductor queue is UI-only |
 
 ---
 

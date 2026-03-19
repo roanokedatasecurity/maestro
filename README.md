@@ -77,7 +77,7 @@ All requests go to the Unix socket at `$MAESTRO_SOCKET` using standard HTTP over
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| `POST` | `/players/{id}/message` | `{"text": "...", "priority": "normal"\|"high"}` | `204` delivered · `202` queued |
+| `POST` | `/players/{id}/assignment` | `{"text": "...", "priority": "normal"\|"high"}` | `204` delivered · `202` queued |
 
 `204` means the player was Idle and the Assignment was delivered immediately (Job created, player now Running). `202` means the player was busy — the Assignment is queued and will be delivered when the player next goes Idle.
 

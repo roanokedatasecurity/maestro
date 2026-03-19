@@ -179,13 +179,13 @@ func TestGetPlayer_NotFound(t *testing.T) {
 	}
 }
 
-// ─── POST /players/{id}/message ────────────────────────────────────────────────
+// ─── POST /players/{id}/assignment ────────────────────────────────────────────
 
-func TestSendMessage_Delivered204(t *testing.T) {
+func TestSendAssignment_Delivered204(t *testing.T) {
 	e := newTestEnv(t)
 	coder, _ := e.players.Register("coder", false)
 	// Coder is Idle — should be delivered immediately (204).
-	resp := post(t, e.url("/players/"+coder.ID+"/message"),
+	resp := post(t, e.url("/players/"+coder.ID+"/assignment"),
 		`{"text":"do the work","priority":"normal"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
@@ -193,36 +193,36 @@ func TestSendMessage_Delivered204(t *testing.T) {
 	}
 }
 
-func TestSendMessage_Queued202(t *testing.T) {
+func TestSendAssignment_Queued202(t *testing.T) {
 	e := newTestEnv(t)
 	coder, _ := e.players.Register("coder2", false)
 	// Send first assignment — delivers immediately and sets coder Running.
-	resp1 := post(t, e.url("/players/"+coder.ID+"/message"), `{"text":"task 1"}`)
+	resp1 := post(t, e.url("/players/"+coder.ID+"/assignment"), `{"text":"task 1"}`)
 	resp1.Body.Close()
 	if resp1.StatusCode != http.StatusNoContent {
 		t.Fatalf("first send: want 204, got %d", resp1.StatusCode)
 	}
 	// Send second while coder is Running — should enqueue (202).
-	resp2 := post(t, e.url("/players/"+coder.ID+"/message"), `{"text":"task 2"}`)
+	resp2 := post(t, e.url("/players/"+coder.ID+"/assignment"), `{"text":"task 2"}`)
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusAccepted {
 		t.Fatalf("second send: want 202, got %d", resp2.StatusCode)
 	}
 }
 
-func TestSendMessage_BadJSON(t *testing.T) {
+func TestSendAssignment_BadJSON(t *testing.T) {
 	e := newTestEnv(t)
 	coder, _ := e.players.Register("coder3", false)
-	resp := post(t, e.url("/players/"+coder.ID+"/message"), `not-json`)
+	resp := post(t, e.url("/players/"+coder.ID+"/assignment"), `not-json`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", resp.StatusCode)
 	}
 }
 
-func TestSendMessage_PlayerNotFound(t *testing.T) {
+func TestSendAssignment_PlayerNotFound(t *testing.T) {
 	e := newTestEnv(t)
-	resp := post(t, e.url("/players/ghost/message"), `{"text":"hi"}`)
+	resp := post(t, e.url("/players/ghost/assignment"), `{"text":"hi"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", resp.StatusCode)
@@ -705,9 +705,9 @@ func TestNew_BadSocketPath(t *testing.T) {
 
 // ─── findConductor error path ─────────────────────────────────────────────────
 
-// TestSendMessage_NoConductor verifies that handleSendMessage returns 500 when
+// TestSendAssignment_NoConductor verifies that handleSendAssignment returns 500 when
 // no active Conductor is registered (findConductor fails).
-func TestSendMessage_NoConductor(t *testing.T) {
+func TestSendAssignment_NoConductor(t *testing.T) {
 	// Build a server with no conductor registered.
 	dir := t.TempDir()
 	st, _ := store.Open(filepath.Join(dir, "test.db"))
@@ -721,7 +721,7 @@ func TestSendMessage_NoConductor(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() { ts.Close(); st.Close() })
 
-	resp := post(t, ts.URL+"/players/"+coder.ID+"/message", `{"text":"hi"}`)
+	resp := post(t, ts.URL+"/players/"+coder.ID+"/assignment", `{"text":"hi"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("want 500 (no conductor), got %d", resp.StatusCode)

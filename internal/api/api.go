@@ -9,7 +9,7 @@
 //	POST   /players                         register a player
 //	GET    /players                         list all players
 //	GET    /players/{id}                    get a player by ID
-//	POST   /players/{id}/message            send Assignment to player (Conductor only)
+//	POST   /players/{id}/assignment         send Assignment to player (Conductor only)
 //	POST   /players/{id}/done               player signals Done
 //	POST   /players/{id}/blocked            player signals Blocked (wait=true holds open)
 //	POST   /players/{id}/background         player signals Background
@@ -94,7 +94,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /players", s.handleRegisterPlayer)
 	mux.HandleFunc("GET /players", s.handleListPlayers)
 	mux.HandleFunc("GET /players/{id}", s.handleGetPlayer)
-	mux.HandleFunc("POST /players/{id}/message", s.handleSendMessage)
+	mux.HandleFunc("POST /players/{id}/assignment", s.handleSendAssignment)
 	mux.HandleFunc("POST /players/{id}/done", s.handleDone)
 	mux.HandleFunc("POST /players/{id}/blocked", s.handleBlocked)
 	mux.HandleFunc("POST /players/{id}/background", s.handleBackground)
