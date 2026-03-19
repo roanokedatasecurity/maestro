@@ -1,9 +1,11 @@
 package bus
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/roanokedatasecurity/maestro/internal/job"
 	"github.com/roanokedatasecurity/maestro/internal/player"
@@ -656,7 +658,7 @@ func TestHandleBlocked_NoWait(t *testing.T) {
 	e.sendAssignment(t, "task")
 	j := e.activeJobForCoder(t)
 
-	if err := e.svc.HandleBlocked(e.coder.ID, j.ID, "I am stuck", false); err != nil {
+	if _, err := e.svc.HandleBlocked(e.coder.ID, j.ID, "I am stuck", "", false); err != nil {
 		t.Fatalf("HandleBlocked: %v", err)
 	}
 
@@ -696,7 +698,7 @@ func TestHandleBlocked_Wait(t *testing.T) {
 	e.sendAssignment(t, "task")
 	j := e.activeJobForCoder(t)
 
-	if err := e.svc.HandleBlocked(e.coder.ID, j.ID, "need approval", true); err != nil {
+	if _, err := e.svc.HandleBlocked(e.coder.ID, j.ID, "need approval", "", true); err != nil {
 		t.Fatalf("HandleBlocked wait=true: %v", err)
 	}
 
@@ -728,7 +730,7 @@ func TestHandleBlocked_Wait(t *testing.T) {
 // TestHandleBlocked_EmptyJobID verifies that an empty jobID returns an error.
 func TestHandleBlocked_EmptyJobID(t *testing.T) {
 	e := newEnv(t)
-	if err := e.svc.HandleBlocked(e.coder.ID, "", "stuck", false); err == nil {
+	if _, err := e.svc.HandleBlocked(e.coder.ID, "", "stuck", "", false); err == nil {
 		t.Fatal("expected error for empty jobID, got nil")
 	}
 }
@@ -1189,5 +1191,107 @@ func TestHandlePlayerDead_ClosedStore(t *testing.T) {
 
 	if err := svc.HandlePlayerDead("no-such-player"); err == nil {
 		t.Fatal("expected error for unknown player, got nil")
+	}
+}
+
+// ─── WaitForDecision / RecordDecision ─────────────────────────────────────────
+
+// TestWaitForDecision_RecordDecision verifies the full round-trip: HandleBlocked
+// with wait=true returns an approvalID; WaitForDecision blocks until
+// RecordDecision signals it with the correct decision.
+func TestWaitForDecision_RecordDecision(t *testing.T) {
+	e := newEnv(t)
+
+	e.sendAssignment(t, "approval task")
+	j := e.activeJobForCoder(t)
+
+	approvalID, err := e.svc.HandleBlocked(e.coder.ID, j.ID, "need decision", "{}", true)
+	if err != nil {
+		t.Fatalf("HandleBlocked: %v", err)
+	}
+	if approvalID == "" {
+		t.Fatal("expected non-empty approvalID for wait=true")
+	}
+
+	// Start WaitForDecision in a goroutine — it should block until RecordDecision.
+	type result struct {
+		decision store.ApprovalDecision
+		err      error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		d, err := e.svc.WaitForDecision(context.Background(), approvalID)
+		ch <- result{d, err}
+	}()
+
+	// Give the goroutine a moment to register the waiter.
+	time.Sleep(20 * time.Millisecond)
+
+	// Record the decision — should unblock WaitForDecision.
+	if err := e.svc.RecordDecision(approvalID, store.ApprovalDecisionHuman); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			t.Fatalf("WaitForDecision returned error: %v", res.err)
+		}
+		if res.decision != store.ApprovalDecisionHuman {
+			t.Errorf("decision: want Human got %q", res.decision)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForDecision did not unblock within 2s")
+	}
+}
+
+// TestWaitForDecision_ContextCancelled verifies that WaitForDecision returns an
+// error when the context is cancelled before a decision is recorded.
+func TestWaitForDecision_ContextCancelled(t *testing.T) {
+	e := newEnv(t)
+
+	e.sendAssignment(t, "cancel task")
+	j := e.activeJobForCoder(t)
+
+	approvalID, err := e.svc.HandleBlocked(e.coder.ID, j.ID, "waiting", "{}", true)
+	if err != nil {
+		t.Fatalf("HandleBlocked: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err = e.svc.WaitForDecision(ctx, approvalID)
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+}
+
+// TestRecordDecision_UnknownApproval verifies that RecordDecision returns an
+// error for a non-existent approval ID.
+func TestRecordDecision_UnknownApproval(t *testing.T) {
+	e := newEnv(t)
+	err := e.svc.RecordDecision("no-such-approval", store.ApprovalDecisionAutonomous)
+	if err == nil {
+		t.Fatal("expected error for unknown approval ID, got nil")
+	}
+}
+
+// TestRecordDecision_NoWaiter verifies that RecordDecision succeeds even when
+// no goroutine is currently waiting (the waiter channel branch is simply skipped).
+func TestRecordDecision_NoWaiter(t *testing.T) {
+	e := newEnv(t)
+
+	e.sendAssignment(t, "no-waiter task")
+	j := e.activeJobForCoder(t)
+
+	approvalID, err := e.svc.HandleBlocked(e.coder.ID, j.ID, "advisory", "{}", true)
+	if err != nil {
+		t.Fatalf("HandleBlocked: %v", err)
+	}
+
+	// RecordDecision with no goroutine waiting — should succeed without blocking.
+	if err := e.svc.RecordDecision(approvalID, store.ApprovalDecisionAutonomous); err != nil {
+		t.Fatalf("RecordDecision (no waiter): %v", err)
 	}
 }

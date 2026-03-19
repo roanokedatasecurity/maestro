@@ -13,8 +13,10 @@
 package bus
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/roanokedatasecurity/maestro/internal/job"
 	"github.com/roanokedatasecurity/maestro/internal/player"
@@ -33,11 +35,22 @@ type Service struct {
 	store   *store.Store
 	players *player.Service
 	jobs    *job.Service
+
+	// waiters holds channels for in-flight wait=true Blocked requests. When a
+	// player calls HandleBlocked with wait=true, the API layer registers a channel
+	// here keyed by approvalID, then blocks until RecordDecision signals it.
+	mu      sync.Mutex
+	waiters map[string]chan store.ApprovalDecision
 }
 
 // New constructs a Service backed by the provided store, player, and job services.
 func New(s *store.Store, players *player.Service, jobs *job.Service) *Service {
-	return &Service{store: s, players: players, jobs: jobs}
+	return &Service{
+		store:   s,
+		players: players,
+		jobs:    jobs,
+		waiters: make(map[string]chan store.ApprovalDecision),
+	}
 }
 
 // ─── Send ──────────────────────────────────────────────────────────────────────
@@ -159,13 +172,17 @@ func (svc *Service) HandleDone(playerID, jobID, summary string) error {
 
 // HandleBlocked processes a Blocked signal from a player. It enqueues a Blocked
 // notification to the Conductor's notification queue. If wait is true, the signal
-// is High-priority (surfaces as an approval overlay in the UI). The player
+// is High-priority (surfaces as an approval overlay in the UI), an Approval record
+// is created, and the returned approvalID can be used with WaitForDecision to hold
+// the player's HTTP connection open until a decision is recorded. The player
 // remains Running — it is waiting for a decision before continuing.
 //
-// jobID is mandatory.
-func (svc *Service) HandleBlocked(playerID, jobID, summary string, wait bool) error {
+// jobID is mandatory. scorecard is a JSON blob (pass "{}" if not yet scored).
+// Returns (approvalID, nil) when wait=true and the Conductor is found; ("", nil)
+// when wait=false.
+func (svc *Service) HandleBlocked(playerID, jobID, summary, scorecard string, wait bool) (string, error) {
 	if jobID == "" {
-		return fmt.Errorf("bus.HandleBlocked: jobID is required")
+		return "", fmt.Errorf("bus.HandleBlocked: jobID is required")
 	}
 	// wait=true means the player is holding its HTTP request open and needs an
 	// explicit approval decision before it can proceed. Surface as High priority
@@ -177,23 +194,67 @@ func (svc *Service) HandleBlocked(playerID, jobID, summary string, wait bool) er
 	}
 	jobIDPtr := jobID
 	if _, err := svc.store.CreateNotification(nil, &jobIDPtr, "Blocked", summary); err != nil {
-		return fmt.Errorf("bus.HandleBlocked: create notification: %w", err)
+		return "", fmt.Errorf("bus.HandleBlocked: create notification: %w", err)
 	}
 	// Enqueue a High-priority Blocked message to the Conductor's queue when wait=true
 	// so the notification surface can distinguish approval-required from advisory blocked.
+	// Also create an Approval record so the decision can be recorded and routed back
+	// to the waiting HTTP connection via WaitForDecision.
 	if wait {
 		conductors, err := svc.store.ListPlayers()
 		if err != nil {
-			return fmt.Errorf("bus.HandleBlocked: list players: %w", err)
+			return "", fmt.Errorf("bus.HandleBlocked: list players: %w", err)
 		}
 		for _, c := range conductors {
 			if c.IsConductor {
-				if _, err := svc.store.CreateMessage(sysFrom, c.ID, store.MessageTypeBlocked, priority, summary, true); err != nil {
-					return fmt.Errorf("bus.HandleBlocked: create blocked message: %w", err)
+				msg, err := svc.store.CreateMessage(sysFrom, c.ID, store.MessageTypeBlocked, priority, summary, true)
+				if err != nil {
+					return "", fmt.Errorf("bus.HandleBlocked: create blocked message: %w", err)
 				}
-				break
+				approval, err := svc.store.CreateApproval(jobID, msg.ID, scorecard)
+				if err != nil {
+					return "", fmt.Errorf("bus.HandleBlocked: create approval: %w", err)
+				}
+				return approval.ID, nil
 			}
 		}
+	}
+	return "", nil
+}
+
+// WaitForDecision blocks until a decision is recorded for the given approvalID,
+// or until ctx is cancelled. Called by the API layer to hold a wait=true Blocked
+// HTTP connection open.
+func (svc *Service) WaitForDecision(ctx context.Context, approvalID string) (store.ApprovalDecision, error) {
+	ch := make(chan store.ApprovalDecision, 1)
+	svc.mu.Lock()
+	svc.waiters[approvalID] = ch
+	svc.mu.Unlock()
+	defer func() {
+		svc.mu.Lock()
+		delete(svc.waiters, approvalID)
+		svc.mu.Unlock()
+	}()
+	select {
+	case decision := <-ch:
+		return decision, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
+// RecordDecision stamps a decision on the given approval and signals any in-flight
+// WaitForDecision call for that approvalID. Called by the API layer when the
+// Conductor (or autonomous policy) decides on a blocked request.
+func (svc *Service) RecordDecision(approvalID string, decision store.ApprovalDecision) error {
+	if err := svc.store.RecordDecision(approvalID, decision); err != nil {
+		return fmt.Errorf("bus.RecordDecision: %w", err)
+	}
+	svc.mu.Lock()
+	ch, ok := svc.waiters[approvalID]
+	svc.mu.Unlock()
+	if ok {
+		ch <- decision
 	}
 	return nil
 }

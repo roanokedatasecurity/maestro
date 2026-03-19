@@ -159,8 +159,8 @@ All packages hold ≥85% test coverage — enforced policy for AI-generated code
 | `internal/store/` | ✅ Complete — 5-table schema, typed CRUD, embedded migrations, 87.8% coverage |
 | `internal/player/` | ✅ Complete — Player model, state machine, Conductor uniqueness, 91.9% coverage |
 | `internal/job/` | ✅ Complete — Job lifecycle, scratchpad management, state machine, 85.4% coverage |
-| `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 85.4% coverage |
-| `internal/api/` | 🔲 Next |
+| `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 86.9% coverage |
+| `internal/api/` | ✅ Complete — Unix socket HTTP server, 13 IPC endpoints, wait=true long-poll approval mechanic, 91.5% coverage |
 | `cmd/maestro/` | 🔲 Pending |
 
 See [`docs/process.md`](docs/process.md) for development process and PR conventions.
