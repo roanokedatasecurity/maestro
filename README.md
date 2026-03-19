@@ -51,6 +51,54 @@ If `$MAESTRO_SOCKET` is set in your environment, you are running inside Maestro.
 
 ---
 
+## API reference
+
+All requests go to the Unix socket at `$MAESTRO_SOCKET` using standard HTTP over a Unix domain socket connection. No authentication — OS file permissions on the socket are the trust boundary.
+
+### Players
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `POST` | `/players` | `{"name": "coder-1", "is_conductor": false}` | `201` player object |
+| `GET` | `/players` | — | `200` array of player objects |
+| `GET` | `/players/{id}` | — | `200` player object · `404` not found |
+
+### Signals (player → Conductor)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `POST` | `/players/{id}/done` | `{"job_id": "$MAESTRO_JOB_ID", "summary": "..."}` | `204` |
+| `POST` | `/players/{id}/blocked` | `{"job_id": "$MAESTRO_JOB_ID", "summary": "...", "scorecard": "{}", "wait": false}` | `204` (wait=false) · `200` decision (wait=true) |
+| `POST` | `/players/{id}/background` | `{"job_id": "$MAESTRO_JOB_ID"}` | `204` |
+
+**`wait=true` mechanic:** the HTTP connection stays open until the Conductor posts a decision to `POST /conductor/approvals/{id}/decide`. The response body is `{"approval_id": "...", "decision": "Human"|"Autonomous"}`.
+
+### Assignments (Conductor → player)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `POST` | `/players/{id}/message` | `{"text": "...", "priority": "normal"\|"high"}` | `204` delivered · `202` queued |
+
+`204` means the player was Idle and the Assignment was delivered immediately (Job created, player now Running). `202` means the player was busy — the Assignment is queued and will be delivered when the player next goes Idle.
+
+### Inspection
+
+| Method | Path | Response |
+|---|---|---|
+| `GET` | `/players/{id}/queue` | `200` array of `{id, type, priority, payload_preview, created_at, age_seconds}` |
+| `GET` | `/jobs` | `200` array of job objects |
+| `GET` | `/jobs/{id}` | `200` job object · `404` not found |
+
+### Conductor notifications
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `GET` | `/conductor/notifications` | query: `limit`, `offset` | `200` `{"notifications": [...], "unread_count": N}` |
+| `POST` | `/conductor/notifications/{id}/read` | — | `204` · `404` not found |
+| `POST` | `/conductor/approvals/{id}/decide` | `{"decision": "Human"\|"Autonomous"}` | `204` · `404` not found |
+
+---
+
 ## The roles
 
 **Session topology is not hardcoded in Maestro.** Each human+AI pair defines their own player roles — what the standard ensemble looks like, what on-demand players get spawned and when. The AI reads those from its memory files at session start and bootstraps accordingly. Maestro stays dumb (infrastructure); the agent stays smart (knows the roles, the coordination model, the domain context).
