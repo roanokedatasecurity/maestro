@@ -177,6 +177,28 @@ Maestro persists queue and job state to SQLite. If you restart, Maestro recovers
 
 ---
 
+## Design
+
+Maestro ships two themes. **Harp** (light/warm — aged ivory, violet accent) is the default. **Timpani** (dark/deep — orchestra pit, copper accent) is for those who live in the dark.
+
+### Harp
+
+| Boot | Running |
+|---|---|
+| ![Harp boot screen](docs/design/harp-boot.png) | ![Harp running layout](docs/design/harp-layout.png) |
+
+### Timpani
+
+| Boot | Running |
+|---|---|
+| ![Timpani boot screen](docs/design/timpani-boot.png) | ![Timpani running layout](docs/design/timpani-layout.png) |
+
+Full design spec (all surfaces, both themes, token reference): [`docs/design/`](docs/design/)
+
+Themes are designed to be AI-native. Listing available themes, previewing what they look like, and switching — including mid-session — will be as simple as asking your Conductor. The theming API is a planned Sprint 2 capability.
+
+---
+
 ## Architecture
 
 See [`docs/ipc-design.md`](docs/ipc-design.md) for the full message bus design and all locked architectural decisions.
@@ -190,17 +212,20 @@ internal/job/      Job lifecycle (InProgress → Backgrounded | Complete | DeadL
 internal/bus/      Message bus: routing enforcement, priority queuing, delivery engine
 internal/api/      Unix socket HTTP server (IPC endpoints)
 cmd/maestro/       Main entry point, wires everything together
+app/               Native macOS app — Wails (Go backend + React/TypeScript + WebView)
 ```
 
 Tests are written alongside each layer. `go test ./...` is green before any UI work begins.
+
+**UI approach:** Maestro ships as a native macOS application built with Wails — Go backend exposing the message bus and IPC API, React/TypeScript frontend rendered in an embedded WebView. This replaces the terminal multiplexer model used in conn v1.
 
 ---
 
 ## Status
 
-Early development. Design complete. Platform layer in active construction.
+**Sprint 1 complete. Platform layer green.**
 
-All packages hold ≥85% test coverage — enforced policy for AI-generated code.
+All packages hold ≥85% test coverage — enforced policy for AI-generated code. Full end-to-end verification passed: binary starts, socket is live, all IPC endpoints respond correctly, graceful shutdown cleans up.
 
 | Layer | Status |
 |---|---|
@@ -209,6 +234,7 @@ All packages hold ≥85% test coverage — enforced policy for AI-generated code
 | `internal/job/` | ✅ Complete — Job lifecycle, scratchpad management, state machine, 85.4% coverage |
 | `internal/bus/` | ✅ Complete — routing enforcement, priority queuing, delivery engine, Job creation, env injection, Conductor notification surface, dead-letter handling, 86.9% coverage |
 | `internal/api/` | ✅ Complete — Unix socket HTTP server, 13 IPC endpoints, wait=true long-poll approval mechanic, 91.5% coverage |
-| `cmd/maestro/` | 🔲 Pending |
+| `cmd/maestro/` | ✅ Complete — layer wiring, socket lifecycle, MAESTRO_SOCKET export, graceful shutdown |
+| Native app (Wails) | 🔲 Sprint 2 — Go backend + React/TypeScript frontend + embedded WebView |
 
 See [`docs/process.md`](docs/process.md) for development process and PR conventions.
