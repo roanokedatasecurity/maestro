@@ -15,3 +15,8 @@ dist/
 
 # Runtime
 /tmp/
+
+# Wails
+cmd/app/frontend/node_modules/
+cmd/app/frontend/dist/
+cmd/app/build/bin/
