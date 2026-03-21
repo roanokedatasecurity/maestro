@@ -2,9 +2,44 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
+
+// AssignmentPayload is the structured envelope for Assignment messages.
+// Task is the human-readable instruction. Params carries typed per-assignment
+// context that varies per job (account IDs, depth flags, etc.).
+// Free-form assignments use Params: {}.
+// Payload column type unchanged (string/TEXT) — semantics locked going forward.
+type AssignmentPayload struct {
+	Task   string         `json:"task"`
+	Params map[string]any `json:"params"`
+}
+
+// NewAssignmentPayload returns an AssignmentPayload with params defaulting to
+// an empty map if nil.
+func NewAssignmentPayload(task string, params map[string]any) AssignmentPayload {
+	if params == nil {
+		params = map[string]any{}
+	}
+	return AssignmentPayload{Task: task, Params: params}
+}
+
+// ParseAssignmentPayload unmarshals a JSON-encoded AssignmentPayload.
+// If raw is not valid JSON, the entire string is treated as the task field
+// with empty params — backward-compatible with Sprint 1 free-form payloads.
+func ParseAssignmentPayload(raw string) (AssignmentPayload, error) {
+	var ap AssignmentPayload
+	if err := json.Unmarshal([]byte(raw), &ap); err != nil {
+		// Backward compat: treat entire raw string as task.
+		return AssignmentPayload{Task: raw, Params: map[string]any{}}, nil
+	}
+	if ap.Params == nil {
+		ap.Params = map[string]any{}
+	}
+	return ap, nil
+}
 
 type MessageType string
 

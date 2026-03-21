@@ -32,7 +32,7 @@ func TestRegisterAndGet(t *testing.T) {
 	svc, cleanup := newTestService(t)
 	defer cleanup()
 
-	p, err := svc.Register("alice", false)
+	p, err := svc.Register("alice", false, nil)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestValidTransitions(t *testing.T) {
 	svc, cleanup := newTestService(t)
 	defer cleanup()
 
-	p, _ := svc.Register("worker", false)
+	p, _ := svc.Register("worker", false, nil)
 
 	// Idle → Running
 	if err := svc.Transition(p.ID, player.StatusRunning); err != nil {
@@ -113,7 +113,7 @@ func TestInvalidTransitions(t *testing.T) {
 		{
 			name: "Idle→Dead",
 			setup: func(svc *player.Service) string {
-				p, _ := svc.Register("p1", false)
+				p, _ := svc.Register("p1", false, nil)
 				return p.ID
 			},
 			target: player.StatusDead,
@@ -121,7 +121,7 @@ func TestInvalidTransitions(t *testing.T) {
 		{
 			name: "Idle→Idle",
 			setup: func(svc *player.Service) string {
-				p, _ := svc.Register("p2", false)
+				p, _ := svc.Register("p2", false, nil)
 				return p.ID
 			},
 			target: player.StatusIdle,
@@ -129,7 +129,7 @@ func TestInvalidTransitions(t *testing.T) {
 		{
 			name: "Dead→Running",
 			setup: func(svc *player.Service) string {
-				p, _ := svc.Register("p3", false)
+				p, _ := svc.Register("p3", false, nil)
 				_ = svc.Transition(p.ID, player.StatusRunning)
 				_ = svc.Transition(p.ID, player.StatusDead)
 				return p.ID
@@ -139,7 +139,7 @@ func TestInvalidTransitions(t *testing.T) {
 		{
 			name: "Dead→Idle",
 			setup: func(svc *player.Service) string {
-				p, _ := svc.Register("p4", false)
+				p, _ := svc.Register("p4", false, nil)
 				_ = svc.Transition(p.ID, player.StatusRunning)
 				_ = svc.Transition(p.ID, player.StatusDead)
 				return p.ID
@@ -149,7 +149,7 @@ func TestInvalidTransitions(t *testing.T) {
 		{
 			name: "Running→Running",
 			setup: func(svc *player.Service) string {
-				p, _ := svc.Register("p5", false)
+				p, _ := svc.Register("p5", false, nil)
 				_ = svc.Transition(p.ID, player.StatusRunning)
 				return p.ID
 			},
@@ -176,13 +176,13 @@ func TestConductorUniqueness(t *testing.T) {
 	defer cleanup()
 
 	// First conductor — should succeed.
-	_, err := svc.Register("conductor-1", true)
+	_, err := svc.Register("conductor-1", true, nil)
 	if err != nil {
 		t.Fatalf("first conductor Register: %v", err)
 	}
 
 	// Second conductor — must fail.
-	_, err = svc.Register("conductor-2", true)
+	_, err = svc.Register("conductor-2", true, nil)
 	if err == nil {
 		t.Fatal("expected error registering second conductor, got nil")
 	}
@@ -194,14 +194,14 @@ func TestConductorUniquenessDeadAllows(t *testing.T) {
 	svc, cleanup := newTestService(t)
 	defer cleanup()
 
-	c1, _ := svc.Register("conductor-1", true)
+	c1, _ := svc.Register("conductor-1", true, nil)
 	_ = svc.Transition(c1.ID, player.StatusRunning)
 	if err := svc.MarkDead(c1.ID); err != nil {
 		t.Fatalf("MarkDead conductor-1: %v", err)
 	}
 
 	// A new conductor should be allowed now.
-	_, err := svc.Register("conductor-2", true)
+	_, err := svc.Register("conductor-2", true, nil)
 	if err != nil {
 		t.Fatalf("conductor-2 Register after conductor-1 Dead: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestMarkDead(t *testing.T) {
 	svc, cleanup := newTestService(t)
 	defer cleanup()
 
-	p, _ := svc.Register("victim", false)
+	p, _ := svc.Register("victim", false, nil)
 	_ = svc.Transition(p.ID, player.StatusRunning)
 
 	if err := svc.MarkDead(p.ID); err != nil {
@@ -234,7 +234,7 @@ func TestSetLastSeen(t *testing.T) {
 	svc, cleanup := newTestService(t)
 	defer cleanup()
 
-	p, _ := svc.Register("heartbeat-player", false)
+	p, _ := svc.Register("heartbeat-player", false, nil)
 	before := p.LastSeenAt
 
 	// SQLite datetime('now') has 1-second resolution — sleep past it.
@@ -301,9 +301,9 @@ func TestList(t *testing.T) {
 	svc, cleanup := newTestService(t)
 	defer cleanup()
 
-	svc.Register("alpha", false)
-	svc.Register("beta", false)
-	svc.Register("gamma", true)
+	svc.Register("alpha", false, nil)
+	svc.Register("beta", false, nil)
+	svc.Register("gamma", true, nil)
 
 	players, err := svc.List()
 	if err != nil {

@@ -13,8 +13,9 @@ import (
 // ─── Player endpoints ──────────────────────────────────────────────────────────
 
 type registerPlayerReq struct {
-	Name        string `json:"name"`
-	IsConductor bool   `json:"is_conductor"`
+	Name        string              `json:"name"`
+	IsConductor bool                `json:"is_conductor"`
+	Profile     *store.PlayerProfile `json:"profile,omitempty"` // optional
 }
 
 // handleRegisterPlayer handles POST /players.
@@ -24,7 +25,7 @@ func (s *Server) handleRegisterPlayer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: name is required", http.StatusBadRequest)
 		return
 	}
-	p, err := s.players.Register(req.Name, req.IsConductor)
+	p, err := s.players.Register(req.Name, req.IsConductor, req.Profile)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -38,6 +38,7 @@ type Player struct {
 	Name        string
 	Status      Status
 	IsConductor bool
+	Profile     *store.PlayerProfile // nil if no profile was provided at registration
 	CreatedAt   time.Time
 	LastSeenAt  time.Time
 }
@@ -54,8 +55,9 @@ func New(s *store.Store) *Service {
 
 // Register creates a new Player in Idle status.
 // Returns an error if isConductor is true and a live Conductor already exists.
-func (svc *Service) Register(name string, isConductor bool) (*Player, error) {
-	p, err := svc.store.CreatePlayer(name, isConductor)
+// profile is optional — pass nil for players registered without a spawn profile.
+func (svc *Service) Register(name string, isConductor bool, profile *store.PlayerProfile) (*Player, error) {
+	p, err := svc.store.CreatePlayer(name, isConductor, profile)
 	if err != nil {
 		return nil, fmt.Errorf("player.Register: %w", err)
 	}
@@ -132,6 +134,7 @@ func fromStore(p *store.Player) *Player {
 		Name:        p.Name,
 		Status:      Status(p.Status),
 		IsConductor: p.IsConductor,
+		Profile:     p.Profile,
 		CreatedAt:   p.CreatedAt,
 		LastSeenAt:  p.LastSeenAt,
 	}
