@@ -225,9 +225,18 @@ Same endpoint surface — different internals.
 
 ```
 POST /players/:id/assignment    → enqueue Assignment (Conductor only)
-{ "text": "...", "priority": "normal" }
+{ "task": "...", "params": { "key": "value" }, "priority": "normal" }
 → 202 Accepted   (player busy — enqueued, Job will be created on delivery)
 → 204 No Content (player idle — delivered immediately, Job created)
+
+POST /players                   → register a new player
+{ "name": "researcher-1", "is_conductor": false,
+  "profile": {                          // optional
+    "catalog_entry": "researcher",      // name in catalog (~/.maestro/players/ or shared/players/)
+    "params": { "domain": "customer" }, // merged with catalog param_schema defaults
+    "notes": "..."                      // per-session freeform override
+  }
+}
 
 POST /players/:id/done          → enqueue Done signal to Conductor
 { "summary": "..." }
@@ -437,6 +446,65 @@ states are visible in the `ctrl+n` panel.
 **Policy guard:** the Conductor's approval policy may include a configurable
 max-concurrent-Jobs-per-player limit — a policy dial, not a hard infrastructure
 constraint — to prevent runaway accumulation.
+
+### 7. Assignment payload is a typed JSON envelope
+
+The `Payload` field on `Message` (and mirrored on `Job`) carries a JSON-encoded `AssignmentPayload` rather than free-form text:
+
+```go
+type AssignmentPayload struct {
+    Task   string         `json:"task"`   // human-readable instruction
+    Params map[string]any `json:"params"` // typed per-assignment context; {} if none
+}
+```
+
+`Task` is the instruction the player executes. `Params` carries contextual data that varies per assignment — account IDs, depth flags, target resources — without embedding them as ad-hoc text conventions inside `Task`. A plain text assignment with no context uses `Params: {}`.
+
+**Why locked now:** `Job.Payload` is persisted in SQLite. The approval scorecard (§4) reasons over Job context — it needs structured fields, not a blob. Locking this shape before any Job records exist eliminates a future schema migration. Sprint 1 raw-string payloads are treated as `{ "task": "<raw string>", "params": {} }` during deserialization — no column type change.
+
+### 8. Player catalog entries are Skill-like structures with Maestro lifecycle extensions
+
+Player catalog entries are stored as YAML in `~/.maestro/players/` (machine-local) and `shared/players/` in the `oleria-ai-memory` repo (org-wide, readable by all collaborators — see MAESTRO-B-26). Catalog resolution order: `shared/players/` (org defaults) → `~/.maestro/players/` (local overrides). Local takes precedence — same model as git config (system → global → local).
+
+**Schema:** a `params` block + `spawn_prompt_template` (structurally a Claude Code Skill) plus Maestro-specific extensions:
+
+```yaml
+name: researcher
+description: Deep research agent
+
+params:                          # spawn-time: who this player is
+  domain:
+    type: string
+    enum: [customer, competitor, codebase, general]
+    required: true
+  output_format:
+    type: string
+    default: bullet-summary
+
+notes: |                         # freeform catch-all — no schema update needed
+  Always cite sources.
+
+spawn_prompt_template: |         # Maestro extension: hydrated at spawn time
+  You are a Researcher player. Domain: {{.domain}}.
+  Output format: {{.output_format}}. {{.notes}}
+
+assignment_params:               # Maestro extension: schema for AssignmentPayload.Params
+  target:
+    type: string
+    description: Resource being researched
+  depth:
+    type: string
+    enum: [surface, standard, deep]
+    default: standard
+```
+
+**Skills connection:** The `params` + `spawn_prompt_template` block is structurally equivalent to a Claude Code Skill — a named, parameterized prompt template. A catalog entry IS a Skill that bootstraps an agent rather than expanding a single prompt. `assignment_params` is the Maestro-specific extension that feeds `AssignmentPayload.Params` on each job. Non-Maestro consumers (plain Skill invocations) use the entry by reading `params` + the template and ignoring `spawn_prompt_template` / `assignment_params`.
+
+**Convergence path (MAESTRO-B-13):** When the Maestro MCP server is built, each catalog entry naturally becomes an MCP tool — `spawn_researcher`, `spawn_ticket_coder`, etc. The catalog entry IS the tool definition. `shared/players/` is simultaneously a Maestro player catalog and a shared skill library — the same YAML definition is usable by any collaborator (Damon, Megatron, Veda, Chip) whether inside or outside Maestro.
+
+**Spawn profile on `POST /players`:** When a `profile` block is present, Maestro resolves the catalog entry, merges `params` + `notes`, and hydrates `spawn_prompt_template` to produce the player's boot prompt. `catalog_entry` is optional within `profile` — a bare `{ params, notes }` with no catalog entry is valid for one-off custom players.
+
+See MAESTRO-21 (design lock ticket), MAESTRO-B-23 (backlog origin), MAESTRO-B-26 (shared memory + toolbox).
 
 ---
 

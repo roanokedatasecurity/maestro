@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -63,8 +64,8 @@ func (s *Store) CreatePlayer(name string, isConductor bool, profile *PlayerProfi
 		if err != nil {
 			return nil, fmt.Errorf("create player: marshal profile: %w", err)
 		}
-		s := string(b)
-		profileJSON = &s
+		jsonStr := string(b)
+		profileJSON = &jsonStr
 	}
 
 	_, err := s.db.Exec(`
@@ -160,7 +161,9 @@ func scanPlayer(row *sql.Row) (*Player, error) {
 	p.LastSeenAt = parseTime(lastSeenAt)
 	if profileJSON.Valid && profileJSON.String != "" {
 		var profile PlayerProfile
-		if err := json.Unmarshal([]byte(profileJSON.String), &profile); err == nil {
+		if err := json.Unmarshal([]byte(profileJSON.String), &profile); err != nil {
+			fmt.Fprintf(os.Stderr, "store: player %s: unmarshal profile: %v\n", p.ID, err)
+		} else {
 			p.Profile = &profile
 		}
 	}
@@ -185,7 +188,9 @@ func scanPlayerRow(rows *sql.Rows) (*Player, error) {
 	p.LastSeenAt = parseTime(lastSeenAt)
 	if profileJSON.Valid && profileJSON.String != "" {
 		var profile PlayerProfile
-		if err := json.Unmarshal([]byte(profileJSON.String), &profile); err == nil {
+		if err := json.Unmarshal([]byte(profileJSON.String), &profile); err != nil {
+			fmt.Fprintf(os.Stderr, "store: player %s: unmarshal profile: %v\n", p.ID, err)
+		} else {
 			p.Profile = &profile
 		}
 	}

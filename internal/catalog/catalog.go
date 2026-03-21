@@ -117,6 +117,17 @@ func HydrateSpawnPrompt(entry *CatalogEntry, profile store.PlayerProfile) (strin
 	}
 	data["notes"] = notes
 
+	// Validate required params before executing the template. Without this,
+	// text/template silently renders missing keys as empty strings (missingkey=zero
+	// default), producing a malformed spawn prompt with no error.
+	for k, def := range entry.Params {
+		if def.Required {
+			if _, ok := data[k]; !ok {
+				return "", fmt.Errorf("catalog: %q: required param %q not provided", entry.Name, k)
+			}
+		}
+	}
+
 	funcMap := template.FuncMap{
 		"join": func(items any, sep string) string {
 			switch v := items.(type) {

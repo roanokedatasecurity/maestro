@@ -267,6 +267,30 @@ func TestHydrateSpawnPrompt_JoinWithStringSlice(t *testing.T) {
 	}
 }
 
+// TestHydrateSpawnPrompt_MissingRequiredParam verifies that omitting a required
+// param returns an error rather than silently rendering an empty value in the
+// spawn prompt. Without this check, text/template renders missing keys as ""
+// (missingkey=zero default), producing a malformed prompt with no indication
+// of what went wrong.
+func TestHydrateSpawnPrompt_MissingRequiredParam(t *testing.T) {
+	entry, err := ParseCatalogEntry([]byte(researcherYAML))
+	if err != nil {
+		t.Fatalf("ParseCatalogEntry: %v", err)
+	}
+	// domain is required but not provided.
+	profile := store.PlayerProfile{
+		CatalogEntry: "researcher",
+		Params:       map[string]any{},
+	}
+	_, err = HydrateSpawnPrompt(entry, profile)
+	if err == nil {
+		t.Fatal("expected error for missing required param 'domain', got nil")
+	}
+	if !strings.Contains(err.Error(), "domain") {
+		t.Errorf("error should mention the missing param name, got: %v", err)
+	}
+}
+
 // TestParseCatalogEntry_RequiredFields verifies the YAML parser captures all
 // top-level fields from the researcher reference entry.
 func TestParseCatalogEntry_RequiredFields(t *testing.T) {
