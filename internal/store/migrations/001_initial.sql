@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS players (
     name         TEXT     NOT NULL,
     status       TEXT     NOT NULL DEFAULT 'Idle' CHECK(status IN ('Idle','Running','Dead')),
     is_conductor INTEGER  NOT NULL DEFAULT 0,
+    profile      TEXT,
     created_at   DATETIME NOT NULL DEFAULT (datetime('now')),
     last_seen_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );

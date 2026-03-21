@@ -36,11 +36,11 @@ params:
   tools:
     type: array
     items: string
-    default: [web, slack, gdrive]
+    default: [web, workspace, content_store, crm, enrichment]
     description: >
-      Tool categories this instance is authorized to use.
-      Values correspond to MCP server names or tool groups available
-      in the spawned Claude Code session.
+      Abstract tool categories this instance is authorized to use.
+      Resolved to concrete MCPs at spawn time via the session manifest
+      (Conductor-held mapping agreed at session init). See ipc-design.md §9.
 
 # ---------------------------------------------------------------------------
 # Freeform catch-all — long-tail preferences that don't warrant a schema field.
@@ -49,8 +49,11 @@ params:
 # ---------------------------------------------------------------------------
 notes: |
   Always cite sources inline (URL or file path) next to each finding.
-  When researching customers, check Salesforce opp state first before
-  querying external sources — internal data takes precedence.
+  When researching customers, check the configured CRM first (if crm is in
+  your authorized tools) before querying external sources — internal data
+  takes precedence.
+  Use enrichment tools (if enrichment is in your authorized tools) for
+  external contact and company data.
   Flag confidence level (high / medium / speculative) for each finding.
 
 # ---------------------------------------------------------------------------

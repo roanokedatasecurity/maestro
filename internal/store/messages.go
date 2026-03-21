@@ -29,6 +29,12 @@ func NewAssignmentPayload(task string, params map[string]any) AssignmentPayload 
 // ParseAssignmentPayload unmarshals a JSON-encoded AssignmentPayload.
 // If raw is not valid JSON, the entire string is treated as the task field
 // with empty params — backward-compatible with Sprint 1 free-form payloads.
+//
+// Edge case: a raw string that is valid JSON but of the wrong type (e.g. a
+// JSON number "42" or array ["a","b"]) will unmarshal into a zero-value
+// AssignmentPayload (empty Task, nil Params defaulted to {} below) rather
+// than falling through to the backward-compat path. This cannot occur with
+// real assignment data — noted here so the behavior is explicit.
 func ParseAssignmentPayload(raw string) (AssignmentPayload, error) {
 	var ap AssignmentPayload
 	if err := json.Unmarshal([]byte(raw), &ap); err != nil {

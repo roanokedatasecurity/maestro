@@ -71,6 +71,9 @@ func (a *App) OnStartup(ctx context.Context) {
 	}
 	a.apiServer = srv
 
+	// Intentional global env mutation: child processes (Conductor PTY, players)
+	// inherit this variable at spawn time. Single-process Wails app guarantees
+	// only one instance sets it.
 	os.Setenv("MAESTRO_SOCKET", sockPath)
 
 	go func() {
@@ -114,6 +117,8 @@ func (a *App) GetStatus() string {
 	}
 	b, err := json.Marshal(status)
 	if err != nil {
+		// String concatenation intentional: avoids a recursive dependency on
+		// json.Marshal in an error path where Marshal itself may be broken.
 		return `{"db_ok":false,"socket_ok":false,"version":"` + version + `","error":"marshal failed"}`
 	}
 	return string(b)
