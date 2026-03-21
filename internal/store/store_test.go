@@ -145,7 +145,7 @@ func TestMessages_PriorityOrdering(t *testing.T) {
 func TestTimeFieldsNonZero(t *testing.T) {
 	s := openTestStore(t)
 
-	p, err := s.CreatePlayer("time-check", false)
+	p, err := s.CreatePlayer("time-check", false, nil)
 	if err != nil {
 		t.Fatalf("CreatePlayer: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestTimeFieldsNonZero(t *testing.T) {
 func TestPlayers_CRUD(t *testing.T) {
 	s := openTestStore(t)
 
-	p, err := s.CreatePlayer("researcher", false)
+	p, err := s.CreatePlayer("researcher", false, nil)
 	if err != nil {
 		t.Fatalf("CreatePlayer: %v", err)
 	}
@@ -217,10 +217,10 @@ func TestPlayers_CRUD(t *testing.T) {
 func TestPlayers_ConductorUniqueness(t *testing.T) {
 	s := openTestStore(t)
 
-	if _, err := s.CreatePlayer("conductor", true); err != nil {
+	if _, err := s.CreatePlayer("conductor", true, nil); err != nil {
 		t.Fatalf("first Conductor: %v", err)
 	}
-	if _, err := s.CreatePlayer("conductor-2", true); err == nil {
+	if _, err := s.CreatePlayer("conductor-2", true, nil); err == nil {
 		t.Error("expected error creating second live Conductor, got nil")
 	}
 }
@@ -230,14 +230,14 @@ func TestPlayers_ConductorUniqueness(t *testing.T) {
 func TestPlayers_ConductorAllowedAfterDead(t *testing.T) {
 	s := openTestStore(t)
 
-	first, err := s.CreatePlayer("conductor", true)
+	first, err := s.CreatePlayer("conductor", true, nil)
 	if err != nil {
 		t.Fatalf("CreatePlayer: %v", err)
 	}
 	if err := s.UpdatePlayerStatus(first.ID, PlayerStatusDead); err != nil {
 		t.Fatalf("UpdatePlayerStatus Dead: %v", err)
 	}
-	if _, err := s.CreatePlayer("conductor-2", true); err != nil {
+	if _, err := s.CreatePlayer("conductor-2", true, nil); err != nil {
 		t.Errorf("expected success creating Conductor after prior is Dead: %v", err)
 	}
 }
@@ -247,7 +247,7 @@ func TestJobs_Lifecycle(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 
 	job, err := s.CreateJob(msg.ID, player.ID, "coder", "work", "/tmp/maestro/jobs/test.md")
 	if err != nil {
@@ -310,7 +310,7 @@ func TestJobs_DeadLetter(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "/tmp/maestro/jobs/dl.md")
 
 	if err := s.UpdateJobStatus(job.ID, JobStatusDeadLetter); err != nil {
@@ -334,7 +334,7 @@ func TestJobs_ApprovalMetadataRoundTrip(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "/tmp/maestro/jobs/meta.md")
 
 	meta := map[string]any{"reversibility": "low", "confidence": 0.95}
@@ -506,7 +506,7 @@ func TestJobs_SetScratchpad(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "")
 
 	newPath := "/home/user/.maestro/scratch/" + job.ID + ".md"
@@ -528,7 +528,7 @@ func TestJobs_SetJobDeadLetter(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "work", false)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "/tmp/scratch/test.md")
 
 	if err := s.SetJobDeadLetter(job.ID); err != nil {
@@ -552,7 +552,7 @@ func TestJobs_SetJobPayload(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeAssignment, PriorityNormal, "original", false)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "original", "")
 
 	injected := "original\n\n$MAESTRO_JOB_ID=" + job.ID + "\n$MAESTRO_SCRATCHPAD=/tmp/test.md"
@@ -573,7 +573,7 @@ func TestJobs_SetJobPayload(t *testing.T) {
 func TestJobs_ListJobs(t *testing.T) {
 	s := openTestStore(t)
 
-	p, _ := s.CreatePlayer("coder", false)
+	p, _ := s.CreatePlayer("coder", false, nil)
 	m1, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w1", false)
 	m2, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w2", false)
 	j1, _ := s.CreateJob(m1.ID, p.ID, "coder", "w1", "")
@@ -596,8 +596,8 @@ func TestJobs_ListJobs(t *testing.T) {
 func TestJobs_ListJobsByPlayer(t *testing.T) {
 	s := openTestStore(t)
 
-	pA, _ := s.CreatePlayer("coder-A", false)
-	pB, _ := s.CreatePlayer("coder-B", false)
+	pA, _ := s.CreatePlayer("coder-A", false, nil)
+	pB, _ := s.CreatePlayer("coder-B", false, nil)
 	mA1, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA1", false)
 	mA2, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA2", false)
 	mB1, _ := s.CreateMessage("conductor", pB.ID, MessageTypeAssignment, PriorityNormal, "wB1", false)
@@ -628,7 +628,7 @@ func TestJobs_ListJobsByPlayer(t *testing.T) {
 func TestJobs_ListJobsByStatus(t *testing.T) {
 	s := openTestStore(t)
 
-	p, _ := s.CreatePlayer("coder", false)
+	p, _ := s.CreatePlayer("coder", false, nil)
 	m1, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w1", false)
 	m2, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w2", false)
 	m3, _ := s.CreateMessage("conductor", p.ID, MessageTypeAssignment, PriorityNormal, "w3", false)
@@ -668,8 +668,8 @@ func TestJobs_ListJobsByStatus(t *testing.T) {
 func TestJobs_ListJobsByPlayerAndStatus(t *testing.T) {
 	s := openTestStore(t)
 
-	pA, _ := s.CreatePlayer("coder-A", false)
-	pB, _ := s.CreatePlayer("coder-B", false)
+	pA, _ := s.CreatePlayer("coder-A", false, nil)
+	pB, _ := s.CreatePlayer("coder-B", false, nil)
 	mA1, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA1", false)
 	mA2, _ := s.CreateMessage("conductor", pA.ID, MessageTypeAssignment, PriorityNormal, "wA2", false)
 	mB1, _ := s.CreateMessage("conductor", pB.ID, MessageTypeAssignment, PriorityNormal, "wB1", false)
@@ -797,7 +797,7 @@ func TestNotifications_Count(t *testing.T) {
 func TestPlayers_GetByName(t *testing.T) {
 	s := openTestStore(t)
 
-	p, err := s.CreatePlayer("named-player", false)
+	p, err := s.CreatePlayer("named-player", false, nil)
 	if err != nil {
 		t.Fatalf("CreatePlayer: %v", err)
 	}
@@ -1040,7 +1040,7 @@ func TestApprovals_CRUD(t *testing.T) {
 	s := openTestStore(t)
 
 	msg, _ := s.CreateMessage("conductor", "coder", MessageTypeBlocked, PriorityHigh, "need help", true)
-	player, _ := s.CreatePlayer("coder", false)
+	player, _ := s.CreatePlayer("coder", false, nil)
 	job, _ := s.CreateJob(msg.ID, player.ID, "coder", "work", "/tmp/maestro/jobs/appr.md")
 
 	scorecard := `{"reversibility":"high","confidence":0.6,"impact_radius":"narrow"}`

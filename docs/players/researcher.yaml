@@ -1,0 +1,114 @@
+# Researcher — Reference Player Catalog Entry
+#
+# This is the canonical reference implementation for the Maestro parameterized
+# player catalog format. See ipc-design.md §8 for the full schema specification.
+#
+# Resolution order: shared/players/ (org defaults) → ~/.maestro/players/ (local overrides).
+# Local takes precedence.
+
+name: researcher
+description: >
+  Deep research agent — customer intel, competitor analysis, codebase exploration,
+  and general information synthesis. Produces structured outputs suitable for
+  Conductor consumption or direct human review.
+
+# ---------------------------------------------------------------------------
+# Spawn-time params — define who this player is for the lifetime of the session.
+# Merged with per-session overrides in the POST /players profile.params block.
+# ---------------------------------------------------------------------------
+params:
+  domain:
+    type: string
+    enum: [customer, competitor, codebase, general]
+    required: true
+    description: The research domain this instance specializes in.
+
+  output_format:
+    type: string
+    enum: [bullet-summary, narrative, structured-json]
+    default: bullet-summary
+    description: >
+      How research findings are written to the scratchpad.
+      bullet-summary: concise bullets, easy for Conductor to consume.
+      narrative: prose, useful for human review or doc generation.
+      structured-json: machine-readable, useful for downstream processing.
+
+  tools:
+    type: array
+    items: string
+    default: [web, slack, gdrive]
+    description: >
+      Tool categories this instance is authorized to use.
+      Values correspond to MCP server names or tool groups available
+      in the spawned Claude Code session.
+
+# ---------------------------------------------------------------------------
+# Freeform catch-all — long-tail preferences that don't warrant a schema field.
+# Injected verbatim into the spawn prompt. Overridable per-session via
+# POST /players profile.notes.
+# ---------------------------------------------------------------------------
+notes: |
+  Always cite sources inline (URL or file path) next to each finding.
+  When researching customers, check Salesforce opp state first before
+  querying external sources — internal data takes precedence.
+  Flag confidence level (high / medium / speculative) for each finding.
+
+# ---------------------------------------------------------------------------
+# Maestro extension: spawn prompt template.
+# Hydrated with resolved params + notes at spawn time via Go text/template.
+# Result is passed as the --prompt flag to the claude-cli PlayerLauncher.
+# ---------------------------------------------------------------------------
+spawn_prompt_template: |
+  You are a Researcher player in a Maestro session.
+
+  Domain: {{.domain}}
+  Output format: {{.output_format}}
+  Authorized tools: {{join .tools ", "}}
+
+  {{.notes}}
+
+  Infrastructure:
+  - Your job ID will be set as $MAESTRO_JOB_ID in each assignment.
+  - Write all research outputs to $MAESTRO_SCRATCHPAD.
+  - Signal done via POST /players/:id/done with a one-line summary.
+  - Signal blocked via POST /players/:id/blocked if you need a decision.
+
+  Wait for your first assignment.
+
+# ---------------------------------------------------------------------------
+# Maestro extension: per-assignment context schema.
+# Defines the typed fields that may appear in AssignmentPayload.params
+# when the Conductor sends work to this player. Fields are optional unless
+# marked required — Conductor may omit any field; player treats absent
+# fields as unspecified.
+# ---------------------------------------------------------------------------
+assignment_params:
+  target:
+    type: string
+    description: >
+      The primary subject being researched. For customer domain: account name
+      or Salesforce opp ID. For competitor: company name. For codebase: repo
+      or package name. For general: topic description.
+
+  depth:
+    type: string
+    enum: [surface, standard, deep]
+    default: standard
+    description: >
+      surface: quick scan, top-level findings only (~5 min).
+      standard: thorough pass, cite primary sources (~15 min).
+      deep: exhaustive, follow all threads, synthesize across sources (~30+ min).
+
+  output_path:
+    type: string
+    description: >
+      Optional explicit output path. If omitted, player writes to
+      $MAESTRO_SCRATCHPAD (Maestro-assigned). Use to direct output to a
+      specific file when the Conductor needs it at a known location.
+
+  focus:
+    type: string
+    description: >
+      Optional narrowing constraint within the target. Examples:
+      "IAM stack only", "pricing and packaging", "recent engineering blog posts".
+      Helps a general Researcher behave as a domain-specific one for a single job.

@@ -42,7 +42,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	js := job.New(st)
 	bs := bus.New(st, ps, js)
 
-	conductor, err := ps.Register("conductor", true)
+	conductor, err := ps.Register("conductor", true, nil)
 	if err != nil {
 		t.Fatalf("register conductor: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestGetPlayer_NotFound(t *testing.T) {
 
 func TestSendAssignment_Delivered204(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder", false)
+	coder, _ := e.players.Register("coder", false, nil)
 	// Coder is Idle — should be delivered immediately (204).
 	resp := post(t, e.url("/players/"+coder.ID+"/assignment"),
 		`{"text":"do the work","priority":"normal"}`)
@@ -195,7 +195,7 @@ func TestSendAssignment_Delivered204(t *testing.T) {
 
 func TestSendAssignment_Queued202(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder2", false)
+	coder, _ := e.players.Register("coder2", false, nil)
 	// Send first assignment — delivers immediately and sets coder Running.
 	resp1 := post(t, e.url("/players/"+coder.ID+"/assignment"), `{"text":"task 1"}`)
 	resp1.Body.Close()
@@ -212,7 +212,7 @@ func TestSendAssignment_Queued202(t *testing.T) {
 
 func TestSendAssignment_BadJSON(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder3", false)
+	coder, _ := e.players.Register("coder3", false, nil)
 	resp := post(t, e.url("/players/"+coder.ID+"/assignment"), `not-json`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -233,7 +233,7 @@ func TestSendAssignment_PlayerNotFound(t *testing.T) {
 
 func TestDone_OK(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-done", false)
+	coder, _ := e.players.Register("coder-done", false, nil)
 	// Deliver an assignment to get a Job.
 	if err := e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false); err != nil {
@@ -253,7 +253,7 @@ func TestDone_OK(t *testing.T) {
 
 func TestDone_BadJSON(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-done-bad", false)
+	coder, _ := e.players.Register("coder-done-bad", false, nil)
 	resp := post(t, e.url("/players/"+coder.ID+"/done"), `{bad}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -263,7 +263,7 @@ func TestDone_BadJSON(t *testing.T) {
 
 func TestDone_BusError(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-done-err", false)
+	coder, _ := e.players.Register("coder-done-err", false, nil)
 	// No job_id — bus.HandleDone returns error.
 	resp := post(t, e.url("/players/"+coder.ID+"/done"), `{"summary":"done"}`)
 	defer resp.Body.Close()
@@ -276,7 +276,7 @@ func TestDone_BusError(t *testing.T) {
 
 func TestBlocked_NoWait(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-blocked", false)
+	coder, _ := e.players.Register("coder-blocked", false, nil)
 	if err := e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -292,7 +292,7 @@ func TestBlocked_NoWait(t *testing.T) {
 
 func TestBlocked_Wait_ResolvesWithDecision(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-blocked-wait", false)
+	coder, _ := e.players.Register("coder-blocked-wait", false, nil)
 	if err := e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -345,7 +345,7 @@ func TestBlocked_Wait_ResolvesWithDecision(t *testing.T) {
 
 func TestBlocked_BadJSON(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-blocked-bad", false)
+	coder, _ := e.players.Register("coder-blocked-bad", false, nil)
 	resp := post(t, e.url("/players/"+coder.ID+"/blocked"), `{bad}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -355,7 +355,7 @@ func TestBlocked_BadJSON(t *testing.T) {
 
 func TestBlocked_BusError(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-blocked-err", false)
+	coder, _ := e.players.Register("coder-blocked-err", false, nil)
 	// empty job_id → bus returns error
 	resp := post(t, e.url("/players/"+coder.ID+"/blocked"), `{"summary":"stuck","wait":false}`)
 	defer resp.Body.Close()
@@ -368,7 +368,7 @@ func TestBlocked_BusError(t *testing.T) {
 // waiting for a decision returns 504 Gateway Timeout.
 func TestBlocked_WaitContextCancel(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-blocked-cancel", false)
+	coder, _ := e.players.Register("coder-blocked-cancel", false, nil)
 	if err := e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -399,7 +399,7 @@ func TestBlocked_WaitContextCancel(t *testing.T) {
 
 func TestBackground_OK(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-bg", false)
+	coder, _ := e.players.Register("coder-bg", false, nil)
 	if err := e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -415,7 +415,7 @@ func TestBackground_OK(t *testing.T) {
 
 func TestBackground_BadJSON(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-bg-bad", false)
+	coder, _ := e.players.Register("coder-bg-bad", false, nil)
 	resp := post(t, e.url("/players/"+coder.ID+"/background"), `{bad}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -425,7 +425,7 @@ func TestBackground_BadJSON(t *testing.T) {
 
 func TestBackground_BusError(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-bg-err", false)
+	coder, _ := e.players.Register("coder-bg-err", false, nil)
 	// empty job_id → bus error
 	resp := post(t, e.url("/players/"+coder.ID+"/background"), `{}`)
 	defer resp.Body.Close()
@@ -438,7 +438,7 @@ func TestBackground_BusError(t *testing.T) {
 
 func TestGetQueue_Empty(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-q", false)
+	coder, _ := e.players.Register("coder-q", false, nil)
 	resp := get(t, e.url("/players/"+coder.ID+"/queue"))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -453,7 +453,7 @@ func TestGetQueue_Empty(t *testing.T) {
 
 func TestGetQueue_WithMessages(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-q2", false)
+	coder, _ := e.players.Register("coder-q2", false, nil)
 	// Deliver first (makes coder Running), then enqueue a second.
 	e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task 1", false)
@@ -471,7 +471,7 @@ func TestGetQueue_WithMessages(t *testing.T) {
 
 func TestGetQueue_LongPayloadTruncated(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-q3", false)
+	coder, _ := e.players.Register("coder-q3", false, nil)
 	// Deliver first to make Running, then enqueue a long-payload message.
 	e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "seed", false)
@@ -495,7 +495,7 @@ func TestGetQueue_LongPayloadTruncated(t *testing.T) {
 
 func TestListJobs_OK(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-jobs", false)
+	coder, _ := e.players.Register("coder-jobs", false, nil)
 	e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false)
 
@@ -515,7 +515,7 @@ func TestListJobs_OK(t *testing.T) {
 
 func TestGetJob_OK(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-getjob", false)
+	coder, _ := e.players.Register("coder-getjob", false, nil)
 	e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false)
 	jobs, _ := e.jobs.ListByPlayer(coder.ID)
@@ -559,7 +559,7 @@ func TestGetNotifications_Empty(t *testing.T) {
 
 func TestGetNotifications_WithData(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-notif", false)
+	coder, _ := e.players.Register("coder-notif", false, nil)
 	e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false)
 	jobs, _ := e.jobs.ListByPlayer(coder.ID)
@@ -598,7 +598,7 @@ func TestGetNotifications_QueryParams(t *testing.T) {
 
 func TestMarkNotificationRead_OK(t *testing.T) {
 	e := newTestEnv(t)
-	coder, _ := e.players.Register("coder-read", false)
+	coder, _ := e.players.Register("coder-read", false, nil)
 	e.bus.Send(e.conductor.ID, coder.ID, store.MessageTypeAssignment,
 		store.PriorityNormal, "task", false)
 	jobs, _ := e.jobs.ListByPlayer(coder.ID)
@@ -715,7 +715,7 @@ func TestSendAssignment_NoConductor(t *testing.T) {
 	js := job.New(st)
 	bs := bus.New(st, ps, js)
 
-	coder, _ := ps.Register("coder-nc", false)
+	coder, _ := ps.Register("coder-nc", false, nil)
 
 	srv := newServer(nil, bs, ps, js, st)
 	ts := httptest.NewServer(srv.Handler())

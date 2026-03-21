@@ -42,11 +42,11 @@ func newEnv(t *testing.T) *testEnv {
 	js := job.New(s)
 	svc := New(s, ps, js)
 
-	conductor, err := ps.Register("conductor", true)
+	conductor, err := ps.Register("conductor", true, nil)
 	if err != nil {
 		t.Fatalf("register conductor: %v", err)
 	}
-	coder, err := ps.Register("coder", false)
+	coder, err := ps.Register("coder", false, nil)
 	if err != nil {
 		t.Fatalf("register coder: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRoutingEnforcement(t *testing.T) {
 
 	t.Run("player to player rejected", func(t *testing.T) {
 		// Register a second player so we have two non-conductors.
-		researcher, err := e.players.Register("researcher", false)
+		researcher, err := e.players.Register("researcher", false, nil)
 		if err != nil {
 			t.Fatalf("register researcher: %v", err)
 		}
@@ -1137,7 +1137,7 @@ func TestDeliver_ClosedStore(t *testing.T) {
 	svc := New(s, ps, js)
 
 	// Register coder, then close the store before calling Deliver.
-	coder, err := ps.Register("coder", false)
+	coder, err := ps.Register("coder", false, nil)
 	if err != nil {
 		t.Fatalf("Register coder: %v", err)
 	}
